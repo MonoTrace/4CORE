@@ -29,5 +29,19 @@ namespace FourCore
 
             return false;
         }
+
+        public bool TryDamage(GridPosition position)
+        {
+            for (int index = 0; index < cells.Length; index++)
+            {
+                if (alive[index] && cells[index].Equals(position))
+                {
+                    alive[index] = false;
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 }

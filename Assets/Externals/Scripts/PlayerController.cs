@@ -13,6 +13,8 @@ namespace FourCore
         private BoardState boardState;
         private PlayerState playerState;
         private PlayerView playerView;
+        private ShieldState shieldState;
+        private ShieldView shieldView;
         private TurnManager turnManager;
         private KeyControl heldKey;
         private Vector2Int heldDirection;
@@ -27,11 +29,15 @@ namespace FourCore
             BoardState board,
             PlayerState state,
             PlayerView view,
+            ShieldState shields,
+            ShieldView shieldsView,
             TurnManager turns)
         {
             boardState = board;
             playerState = state;
             playerView = view;
+            shieldState = shields;
+            shieldView = shieldsView;
             turnManager = turns;
         }
 
@@ -40,6 +46,13 @@ namespace FourCore
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
             {
+                ResetHeldInput();
+                return;
+            }
+
+            if (keyboard.spaceKey.wasPressedThisFrame)
+            {
+                TryToggleShield();
                 ResetHeldInput();
                 return;
             }
@@ -103,6 +116,28 @@ namespace FourCore
 
             playerState.MoveTo(destination, movement);
             playerView.Apply(playerState);
+            turnManager.CompletePlayerAction();
+            return true;
+        }
+
+        public bool TryToggleShield()
+        {
+            if (playerState == null || shieldState == null || shieldView == null)
+            {
+                return false;
+            }
+
+            GridPosition position = playerState.Position;
+            bool changed = shieldState.Contains(position)
+                ? shieldState.TryRemove(position)
+                : shieldState.TryAdd(position);
+
+            if (!changed)
+            {
+                return false;
+            }
+
+            shieldView.Apply(shieldState);
             turnManager.CompletePlayerAction();
             return true;
         }

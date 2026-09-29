@@ -11,6 +11,7 @@ namespace FourCore
         public const int VisibleMax = VisibleMin + PlayableGridSize - 1;
         public const int CoreMin = 11;
         public const int CoreMax = 12;
+        public const int MaxShieldCount = 4;
         public const float CellSize = 1f;
 
         public static readonly GridPosition PlayerStart = new(11, 14);

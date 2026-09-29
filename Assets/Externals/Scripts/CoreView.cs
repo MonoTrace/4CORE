@@ -13,29 +13,49 @@ namespace FourCore
 
         public void Initialize(CoreState state)
         {
-            coreMesh = CreateCoreMesh(state);
             coreMaterial = BoardView.CreateUnlitMaterial(coreColor, "Core Material");
 
             MeshFilter meshFilter = gameObject.AddComponent<MeshFilter>();
             MeshRenderer meshRenderer = gameObject.AddComponent<MeshRenderer>();
-            meshFilter.sharedMesh = coreMesh;
             meshRenderer.sharedMaterial = coreMaterial;
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             meshRenderer.receiveShadows = false;
             meshRenderer.sortingOrder = 5;
+
+            Apply(state);
+        }
+
+        public void Apply(CoreState state)
+        {
+            if (coreMesh != null)
+            {
+                Destroy(coreMesh);
+            }
+
+            coreMesh = CreateCoreMesh(state);
+            GetComponent<MeshFilter>().sharedMesh = coreMesh;
         }
 
         private Mesh CreateCoreMesh(CoreState state)
         {
-            Vector3[] vertices = new Vector3[state.CellCount * 4];
-            int[] triangles = new int[state.CellCount * 6];
+            int aliveCount = 0;
+            for (int index = 0; index < state.CellCount; index++)
+            {
+                if (state.IsAlive(index)) aliveCount++;
+            }
+
+            Vector3[] vertices = new Vector3[aliveCount * 4];
+            int[] triangles = new int[aliveCount * 6];
             float halfSize = GameConfig.CellSize * 0.5f - cellInset;
+            int aliveIndex = 0;
 
             for (int index = 0; index < state.CellCount; index++)
             {
+                if (!state.IsAlive(index)) continue;
+
                 Vector3 center = GameConfig.LogicalToWorld(state.GetCell(index), -0.05f);
-                int vertex = index * 4;
-                int triangle = index * 6;
+                int vertex = aliveIndex * 4;
+                int triangle = aliveIndex * 6;
 
                 vertices[vertex] = center + new Vector3(-halfSize, -halfSize, 0f);
                 vertices[vertex + 1] = center + new Vector3(-halfSize, halfSize, 0f);
@@ -48,6 +68,7 @@ namespace FourCore
                 triangles[triangle + 3] = vertex;
                 triangles[triangle + 4] = vertex + 2;
                 triangles[triangle + 5] = vertex + 3;
+                aliveIndex++;
             }
 
             Mesh mesh = new()

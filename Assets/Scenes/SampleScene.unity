@@ -328,12 +328,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 604143420}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5abd440f8bab90447bfc41f192331698, type: 3}
+  m_Script: {fileID: 11500000, guid: b3c94769ecc70ec478e9b7e411ec4057, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FourCore.GridMovementPrototype
-  backgroundColor: {r: 0.012, g: 0.018, b: 0.04, a: 1}
-  gridColor: {r: 0.11, g: 0.19, b: 0.31, a: 0.9}
-  playerColor: {r: 0.08, g: 0.65, b: 1, a: 1}
+  m_EditorClassIdentifier: Assembly-CSharp::FourCore.GameBootstrap
+  backgroundColor: {r: 0.008, g: 0.014, b: 0.032, a: 1}
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0

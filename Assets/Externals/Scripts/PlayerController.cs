@@ -13,6 +13,7 @@ namespace FourCore
         private BoardState boardState;
         private PlayerState playerState;
         private PlayerView playerView;
+        private PlayerEnergyState playerEnergyState;
         private ShieldState shieldState;
         private ShieldView shieldView;
         private TurnManager turnManager;
@@ -29,6 +30,7 @@ namespace FourCore
             BoardState board,
             PlayerState state,
             PlayerView view,
+            PlayerEnergyState energy,
             ShieldState shields,
             ShieldView shieldsView,
             TurnManager turns)
@@ -36,6 +38,7 @@ namespace FourCore
             boardState = board;
             playerState = state;
             playerView = view;
+            playerEnergyState = energy;
             shieldState = shields;
             shieldView = shieldsView;
             turnManager = turns;
@@ -122,15 +125,34 @@ namespace FourCore
 
         public bool TryToggleShield()
         {
-            if (playerState == null || shieldState == null || shieldView == null)
+            if (playerState == null || playerEnergyState == null || shieldState == null || shieldView == null)
             {
                 return false;
             }
 
             GridPosition position = playerState.Position;
-            bool changed = shieldState.Contains(position)
-                ? shieldState.TryRemove(position)
-                : shieldState.TryAdd(position);
+            bool changed;
+            if (shieldState.Contains(position))
+            {
+                changed = shieldState.TryRemove(position);
+                if (changed)
+                {
+                    playerEnergyState.TryRestore();
+                }
+            }
+            else
+            {
+                if (!playerEnergyState.TrySpend())
+                {
+                    return false;
+                }
+
+                changed = shieldState.TryAdd(position);
+                if (!changed)
+                {
+                    playerEnergyState.TryRestore();
+                }
+            }
 
             if (!changed)
             {
@@ -138,7 +160,6 @@ namespace FourCore
             }
 
             shieldView.Apply(shieldState);
-            turnManager.CompletePlayerAction();
             return true;
         }
     }

@@ -15,12 +15,14 @@ namespace FourCore
             CoreState coreState = new();
             BoardState boardState = new(coreState);
             PlayerState playerState = new(GameConfig.PlayerStart);
+            PlayerEnergyState playerEnergyState = new(4);
             ShieldState shieldState = new(GameConfig.MaxShieldCount);
 
             Transform boardRoot = CreateContainer("Board", transform);
             Transform entitiesRoot = CreateContainer("Entities", transform);
             Transform shieldsRoot = CreateContainer("Shields", transform);
             Transform enemiesRoot = CreateContainer("Enemies", entitiesRoot);
+            Transform uiRoot = CreateContainer("UI", transform);
 
             BoardView boardView = boardRoot.gameObject.AddComponent<BoardView>();
             TurnManager turnManager = GetOrAddComponent<TurnManager>(gameObject);
@@ -40,10 +42,27 @@ namespace FourCore
             PlayerView playerView = playerObject.AddComponent<PlayerView>();
             PlayerController playerController = playerObject.AddComponent<PlayerController>();
             playerView.Initialize(playerState);
-            playerController.Initialize(boardState, playerState, playerView, shieldState, shieldView, turnManager);
+            playerController.Initialize(
+                boardState,
+                playerState,
+                playerView,
+                playerEnergyState,
+                shieldState,
+                shieldView,
+                turnManager);
 
             EnemyManager enemyManager = enemiesRoot.gameObject.AddComponent<EnemyManager>();
-            enemyManager.Initialize(coreState, coreView, playerState, shieldState, shieldView, turnManager);
+            enemyManager.Initialize(
+                coreState,
+                coreView,
+                playerState,
+                playerEnergyState,
+                shieldState,
+                shieldView,
+                turnManager);
+
+            EnergyHud energyHud = uiRoot.gameObject.AddComponent<EnergyHud>();
+            energyHud.Initialize(playerEnergyState);
         }
 
         private void ConfigureCamera()

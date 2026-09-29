@@ -25,6 +25,7 @@ namespace FourCore
         private CoreState coreState;
         private CoreView coreView;
         private PlayerState playerState;
+        private PlayerEnergyState playerEnergyState;
         private ShieldState shieldState;
         private ShieldView shieldView;
         private TurnManager turnManager;
@@ -37,6 +38,7 @@ namespace FourCore
             CoreState core,
             CoreView coreDisplay,
             PlayerState player,
+            PlayerEnergyState playerEnergy,
             ShieldState shields,
             ShieldView shieldsDisplay,
             TurnManager turns)
@@ -44,6 +46,7 @@ namespace FourCore
             coreState = core;
             coreView = coreDisplay;
             playerState = player;
+            playerEnergyState = playerEnergy;
             shieldState = shields;
             shieldView = shieldsDisplay;
             turnManager = turns;
@@ -71,6 +74,12 @@ namespace FourCore
 
             foreach (EnemyRuntime enemy in enemies)
             {
+                if (enemy.State.Position.Equals(playerState.Position))
+                {
+                    DamagePlayerAndRemove(enemy);
+                    continue;
+                }
+
                 if (enemy.State.WaitBeforeMoving()) continue;
 
                 GridPosition destination = enemy.State.GetNextPosition();
@@ -78,6 +87,7 @@ namespace FourCore
                 {
                     shieldState.TryRemove(destination);
                     shieldView.Apply(shieldState);
+                    playerEnergyState.TryRestore();
                     removedEnemies.Add(enemy);
                     continue;
                 }
@@ -90,6 +100,12 @@ namespace FourCore
                     continue;
                 }
 
+                if (destination.Equals(playerState.Position))
+                {
+                    DamagePlayerAndRemove(enemy);
+                    continue;
+                }
+
                 enemy.State.MoveTo(destination);
                 enemy.View.Apply(enemy.State);
             }
@@ -99,6 +115,12 @@ namespace FourCore
                 enemies.Remove(enemy);
                 Destroy(enemy.View.gameObject);
             }
+        }
+
+        private void DamagePlayerAndRemove(EnemyRuntime enemy)
+        {
+            playerEnergyState.TryDamageTotal();
+            removedEnemies.Add(enemy);
         }
 
         private void SpawnStraightEnemy()

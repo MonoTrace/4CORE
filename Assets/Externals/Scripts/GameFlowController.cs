@@ -36,6 +36,10 @@ namespace FourCore
         {
             this.output = output; this.player = player; this.board = board;
             this.core = core; this.controls = controls; this.enemies = enemies;
+            RestoreCanvasRootScale(titleGroup);
+            RestoreCanvasRootScale(hudGroup);
+            titleGroup.gameObject.SetActive(true);
+            hudGroup.gameObject.SetActive(true);
             controls.SetGameplayInput(false);
             board.SetVisibility(0f);
             core.SetActive(false);
@@ -49,6 +53,19 @@ namespace FourCore
             State = GameFlowState.Title;
             initialized = true;
             SetCamera(TitlePosition(), titleZoom);
+        }
+
+        private static void RestoreCanvasRootScale(CanvasGroup group)
+        {
+            if (group == null) return;
+            RectTransform root = group.transform as RectTransform;
+            if (root == null) return;
+            Vector3 scale = root.localScale;
+            if (Mathf.Abs(scale.x) < 0.0001f || Mathf.Abs(scale.y) < 0.0001f || Mathf.Abs(scale.z) < 0.0001f)
+            {
+                root.localScale = Vector3.one;
+                Debug.LogWarning($"Restored zero-scale UI canvas root '{root.name}' so its buttons and text can render.", root);
+            }
         }
 
         private Vector3 TitlePosition()

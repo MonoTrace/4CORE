@@ -17,6 +17,7 @@ namespace FourCore.EditorTools
             ScoreHud score = UnityEngine.Object.FindAnyObjectByType<ScoreHud>();
             if (bootstrap == null || score == null) throw new InvalidOperationException("Gameplay scene and HUD required.");
             Canvas hud = score.GetComponentInParent<Canvas>();
+            hud.transform.localScale = Vector3.one;
             CanvasGroup hudGroup = hud.GetComponent<CanvasGroup>();
             if (hudGroup == null) hudGroup = Undo.AddComponent<CanvasGroup>(hud.gameObject);
             GameFlowController flow = bootstrap.GetComponent<GameFlowController>();
@@ -30,6 +31,7 @@ namespace FourCore.EditorTools
                 Undo.RegisterCreatedObjectUndo(root, "Create title screen");
                 root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
                 root.GetComponent<Canvas>().sortingOrder = 200;
+                root.transform.localScale = Vector3.one;
                 UnityEngine.UI.CanvasScaler scaler = root.GetComponent<UnityEngine.UI.CanvasScaler>();
                 scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
                 scaler.referenceResolution = new Vector2(1920, 1080);
@@ -46,6 +48,11 @@ namespace FourCore.EditorTools
                 config.FindProperty("titleGroup").objectReferenceValue = root.GetComponent<CanvasGroup>();
                 config.FindProperty("startButton").objectReferenceValue = start;
                 config.FindProperty("quitButton").objectReferenceValue = quit;
+            }
+            else
+            {
+                CanvasGroup existingTitleGroup = config.FindProperty("titleGroup").objectReferenceValue as CanvasGroup;
+                if (existingTitleGroup != null) existingTitleGroup.transform.localScale = Vector3.one;
             }
             config.FindProperty("hudGroup").objectReferenceValue = hudGroup;
             config.FindProperty("sceneCamera").objectReferenceValue = UnityEngine.Object.FindAnyObjectByType<CinemachineCamera>();

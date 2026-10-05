@@ -67,7 +67,7 @@ namespace FourCore.EditorTools
             CoreState core = Get<CoreState>(manager, "coreState");
             StringBuilder value = new();
             value.Append($"{player.CurrentTurn}|{state.Position}|{state.Facing}|{energy.Current}/{energy.Total}|{Get<ScoreState>(manager, "scoreState").Total}|");
-            for (int i = 0; i < core.CellCount; i++) value.Append(core.IsAlive(i));
+            for (int i = 0; i < core.CellCount; i++) value.Append($"{core.IsAlive(i)}:{core.GetRecoveryTurns(i)};");
             List<string> shields = new();
             foreach (GridPosition p in Get<ShieldState>(player, "shieldState").Positions) shields.Add(p.ToString());
             shields.Sort(StringComparer.Ordinal);

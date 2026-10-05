@@ -25,6 +25,13 @@ namespace FourCore
 
             gridMesh = CreateGridMesh();
             gridMaterial = CreateUnlitMaterial(gridColor, "Grid Material");
+            gridMaterial.SetOverrideTag("RenderType", "Transparent");
+            gridMaterial.renderQueue = (int)RenderQueue.Transparent;
+            gridMaterial.SetFloat("_Surface", 1f);
+            gridMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            gridMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            gridMaterial.SetFloat("_ZWrite", 0f);
+            gridMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
 
             meshFilter.sharedMesh = gridMesh;
             meshRenderer.sharedMaterial = gridMaterial;
@@ -61,6 +68,14 @@ namespace FourCore
             mesh.SetIndices(indices, MeshTopology.Lines, 0);
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        public void SetVisibility(float opacity)
+        {
+            if (gridMaterial == null) return;
+            Color color = gridColor;
+            color.a *= Mathf.Clamp01(opacity);
+            gridMaterial.color = color;
         }
 
         public static Material CreateUnlitMaterial(Color color, string materialName)

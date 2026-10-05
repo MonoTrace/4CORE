@@ -18,6 +18,15 @@ namespace FourCore
         private ShieldView shieldView;
         private TurnManager turnManager;
         private TurnUndoHistory undoHistory;
+        public bool GameplayInputEnabled { get; private set; } = true;
+        public bool PresentationInputLocked { get; private set; }
+        public void SetPresentationInputLock(bool locked) => PresentationInputLocked = locked;
+
+        public void SetGameplayInput(bool enabled)
+        {
+            GameplayInputEnabled = enabled;
+            ResetHeldInput();
+        }
         private KeyControl heldKey;
         private Vector2Int heldDirection;
         private float nextRepeatTime;
@@ -31,6 +40,7 @@ namespace FourCore
 
         public bool TryUndo()
         {
+            if (!GameplayInputEnabled) return false;
             ResetHeldInput();
             bool restored = undoHistory != null && undoHistory.TryUndo();
             if (!restored) Debug.Log("[UNDO] No earlier turn available (maximum 5 turns).");
@@ -57,6 +67,7 @@ namespace FourCore
 
         private void Update()
         {
+            if (!GameplayInputEnabled) return;
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
             {
@@ -69,6 +80,8 @@ namespace FourCore
                 TryUndo();
                 return;
             }
+
+            if (PresentationInputLocked) return;
 
             if (keyboard.spaceKey.wasPressedThisFrame)
             {
@@ -123,6 +136,7 @@ namespace FourCore
 
         public bool TryMove(Vector2Int movement)
         {
+            if (!GameplayInputEnabled || PresentationInputLocked) return false;
             if (boardState == null || playerState == null || movement.sqrMagnitude != 1)
             {
                 return false;
@@ -143,6 +157,7 @@ namespace FourCore
 
         public bool TryToggleShield()
         {
+            if (!GameplayInputEnabled || PresentationInputLocked) return false;
             if (playerState == null || playerEnergyState == null || shieldState == null || shieldView == null)
             {
                 return false;
@@ -155,7 +170,7 @@ namespace FourCore
                 changed = shieldState.TryRemove(position);
                 if (changed)
                 {
-                    playerEnergyState.TryRestore();
+                    playerEnergyState.TryRestore(shieldState.Count);
                 }
             }
             else
@@ -168,7 +183,7 @@ namespace FourCore
                 changed = shieldState.TryAdd(position);
                 if (!changed)
                 {
-                    playerEnergyState.TryRestore();
+                    playerEnergyState.TryRestore(shieldState.Count);
                 }
             }
 

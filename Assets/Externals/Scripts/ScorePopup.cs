@@ -24,7 +24,7 @@ namespace FourCore
 
         private void Update()
         {
-            age += Time.unscaledDeltaTime;
+            age += Time.deltaTime;
             float progress = Mathf.Clamp01(age / lifetime);
             transform.localPosition = startPosition + Vector3.up * (riseDistance * progress);
             transform.localScale = baseScale * (1f + 0.15f * Mathf.Sin(Mathf.Clamp01(age / 0.22f) * Mathf.PI));

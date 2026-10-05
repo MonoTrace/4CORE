@@ -99,9 +99,8 @@ namespace FourCore.EditorTools
             }
 
             SerializedObject boot = new(bootstrap);
-            EnergyHud energy = boot.FindProperty("energyHud").objectReferenceValue as EnergyHud;
             ScoreHud score = boot.FindProperty("scoreHud").objectReferenceValue as ScoreHud;
-            if (energy == null || score == null)
+            if (score == null)
             {
                 GameObject hud = new("HUD", typeof(RectTransform), typeof(Canvas),
                     typeof(UnityEngine.UI.CanvasScaler), typeof(UnityEngine.UI.GraphicRaycaster));
@@ -114,13 +113,6 @@ namespace FourCore.EditorTools
                 scaler.referenceResolution = new Vector2(1920f, 1080f);
                 scaler.matchWidthOrHeight = 0.5f;
 
-                if (energy == null)
-                {
-                    TextMeshProUGUI label = AddText(hud.transform, "EnergyText", "ENERGY  4 / 4",
-                        42f, 40f, new Vector2(440f, 80f), new Color(0.2f, 0.72f, 1f), FontStyles.Bold);
-                    energy = label.gameObject.AddComponent<EnergyHud>();
-                    SetReference(energy, "energyText", label);
-                }
                 if (score == null)
                 {
                     TextMeshProUGUI label = AddText(hud.transform, "ScoreText", "SCORE  0",
@@ -141,7 +133,6 @@ namespace FourCore.EditorTools
             SerializedProperty enemyList = boot.FindProperty("enemyPrefabs");
             enemyList.arraySize = enemies.Length;
             for (int i = 0; i < enemies.Length; i++) enemyList.GetArrayElementAtIndex(i).objectReferenceValue = enemies[i];
-            boot.FindProperty("energyHud").objectReferenceValue = energy;
             boot.FindProperty("scoreHud").objectReferenceValue = score;
             boot.ApplyModifiedProperties();
             EditorSceneManager.MarkSceneDirty(bootstrap.gameObject.scene);

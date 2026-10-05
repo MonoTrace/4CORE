@@ -13,13 +13,13 @@ namespace FourCore
         [SerializeField] private EnemyView[] enemyPrefabs;
         [SerializeField] private ScorePopup scorePopupPrefab;
         [Header("Scene HUD")]
-        [SerializeField] private EnergyHud energyHud;
         [SerializeField] private ScoreHud scoreHud;
+        [SerializeField] private GameFlowController gameFlow;
 
         private void Awake()
         {
             if (playerPrefab == null || corePrefab == null || shieldPrefab == null ||
-                energyHud == null || scoreHud == null || enemyPrefabs == null || enemyPrefabs.Length == 0)
+                scoreHud == null || enemyPrefabs == null || enemyPrefabs.Length == 0)
             {
                 Debug.LogError("Assign gameplay prefabs and scene HUD references on GameBootstrap.", this);
                 enabled = false;
@@ -33,7 +33,7 @@ namespace FourCore
             ScoreState scoreState = new();
             BoardState boardState = new(coreState);
             PlayerState playerState = new(GameConfig.PlayerStart);
-            PlayerEnergyState playerEnergyState = new(4);
+            PlayerEnergyState playerEnergyState = new(coreState.AliveCount);
             ShieldState shieldState = new(GameConfig.MaxShieldCount);
 
             Transform boardRoot = CreateContainer("Board", transform);
@@ -66,6 +66,8 @@ namespace FourCore
                 turnManager);
 
             EnemyManager enemyManager = enemiesRoot.gameObject.AddComponent<EnemyManager>();
+            CoreLinkView links = coreView.GetComponent<CoreLinkView>();
+            if (links != null) links.Initialize(coreState, coreView, playerView.transform, playerController);
             enemyManager.Initialize(
                 coreState,
                 coreView,
@@ -76,13 +78,15 @@ namespace FourCore
                 turnManager,
                 scoreState,
                 enemyPrefabs,
-                scorePopupPrefab);
+                scorePopupPrefab,
+                startImmediately: gameFlow == null);
 
-            energyHud.Initialize(playerEnergyState);
             scoreHud.Initialize(scoreState);
             playerController.SetUndoHistory(new TurnUndoHistory(
                 playerState, playerView, playerEnergyState, coreState, coreView,
                 shieldState, shieldView, scoreState, turnManager, enemyManager));
+            if (gameFlow != null)
+                gameFlow.Initialize(Camera.main, playerView.transform, boardView, coreView.gameObject, playerController, enemyManager);
         }
 
         private void ConfigureCamera()

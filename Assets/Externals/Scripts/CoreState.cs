@@ -11,6 +11,8 @@ namespace FourCore
         };
 
         private readonly bool[] alive = { true, true, true, true };
+        private readonly int[] recoveryTurns = new int[4];
+        public const int RecoveryDuration = 90;
 
         public int CellCount => cells.Length;
 
@@ -31,9 +33,25 @@ namespace FourCore
         public GridPosition GetCell(int index) => cells[index];
         public bool IsAlive(int index) => alive[index];
 
-        public bool[] Capture() => (bool[])alive.Clone();
+        public int GetRecoveryTurns(int index) => recoveryTurns[index];
 
-        public void Restore(bool[] saved) => System.Array.Copy(saved, alive, alive.Length);
+        public int[] Capture() => (int[])recoveryTurns.Clone();
+
+        public void Restore(int[] saved)
+        {
+            System.Array.Copy(saved, recoveryTurns, recoveryTurns.Length);
+            for (int i = 0; i < alive.Length; i++) alive[i] = recoveryTurns[i] == 0;
+        }
+
+        public void AdvanceRecovery()
+        {
+            for (int i = 0; i < alive.Length; i++)
+            {
+                if (recoveryTurns[i] <= 0) continue;
+                recoveryTurns[i]--;
+                if (recoveryTurns[i] == 0) alive[i] = true;
+            }
+        }
 
         public bool Occupies(GridPosition position)
         {
@@ -55,6 +73,7 @@ namespace FourCore
                 if (alive[index] && cells[index].Equals(position))
                 {
                     alive[index] = false;
+                    recoveryTurns[index] = RecoveryDuration;
                     UnityEngine.Debug.Log(
                         $"[CORE DESTROYED] 턴={turn} | 코어 칸={index + 1}, 논리 좌표={position} | 원인={reason}");
                     return true;

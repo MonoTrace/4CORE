@@ -23,6 +23,18 @@ namespace FourCore
             return true;
         }
 
+        public void SetMaximumFromCores(int aliveCores, int deployedShields = 0)
+        {
+            int maximum = Math.Max(0, aliveCores);
+            int recovered = Math.Max(0, maximum - Total);
+            int available = Math.Max(0, maximum - deployedShields);
+            int current = Math.Clamp(Current + recovered, 0, available);
+            if (maximum == Total && current == Current) return;
+            Total = maximum;
+            Current = current;
+            Changed?.Invoke(Current, Total);
+        }
+
         public void Restore(int current, int total)
         {
             Total = Math.Max(0, total);
@@ -38,9 +50,9 @@ namespace FourCore
             return true;
         }
 
-        public bool TryRestore()
+        public bool TryRestore(int deployedShields = 0)
         {
-            if (Current >= Total) return false;
+            if (Current >= Math.Max(0, Total - deployedShields)) return false;
             Current++;
             Changed?.Invoke(Current, Total);
             return true;

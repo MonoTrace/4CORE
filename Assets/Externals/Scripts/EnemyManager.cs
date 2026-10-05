@@ -34,6 +34,7 @@ namespace FourCore
         private readonly Dictionary<EnemyType, EnemyView> prefabs = new();
         private int spawnIndex;
         private int turnsUntilSpawn;
+        private bool spawningStarted;
 
         public int ActiveEnemyCount => enemies.Count;
 
@@ -88,7 +89,8 @@ namespace FourCore
             TurnManager turns,
             ScoreState score,
             EnemyView[] enemyPrefabs,
-            ScorePopup popupPrefab = null)
+            ScorePopup popupPrefab = null,
+            bool startImmediately = true)
         {
             coreState = core;
             coreView = coreDisplay;
@@ -111,6 +113,13 @@ namespace FourCore
                     throw new System.InvalidOperationException($"Missing prefab for enemy type: {type}");
             turnManager.TurnCompleted += HandleTurnCompleted;
 
+            if (startImmediately) StartSpawning();
+        }
+
+        public void StartSpawning()
+        {
+            if (spawningStarted) return;
+            spawningStarted = true;
             SpawnNextEnemy();
             turnsUntilSpawn = spawnIntervalTurns;
             RefreshPaths();
@@ -118,6 +127,11 @@ namespace FourCore
 
         private void HandleTurnCompleted(int currentTurn)
         {
+            if (!spawningStarted) return;
+            // Tick existing damage before enemy attacks, so a new hit displays 90.
+            coreState.AdvanceRecovery();
+            coreView.Apply(coreState);
+            playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
             StepEnemies();
 
             turnsUntilSpawn--;
@@ -154,7 +168,7 @@ namespace FourCore
                 {
                     shieldState.TryRemove(destination);
                     shieldView.Apply(shieldState);
-                    playerEnergyState.TryRestore();
+                    playerEnergyState.TryRestore(shieldState.Count);
                     int coreCount = coreState.AliveCount;
                     long awarded = scoreState.AddEnemyDefeat(enemy.State.BaseScore, coreCount);
                     if (awarded > 0 && scorePopupPrefab != null)
@@ -176,6 +190,7 @@ namespace FourCore
                         turnManager.CurrentTurn,
                         $"적 충돌 | 종류={enemy.State.Type} | 적={enemy.View.name} | 이동={enemy.State.Position} -> {destination}");
                     coreView.Apply(coreState);
+                    playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
                     removedEnemies.Add(enemy);
                     continue;
                 }
@@ -200,7 +215,7 @@ namespace FourCore
 
         private void DamagePlayerAndRemove(EnemyRuntime enemy)
         {
-            playerEnergyState.TryDamageTotal();
+            playerEnergyState.TrySpend();
             removedEnemies.Add(enemy);
         }
 

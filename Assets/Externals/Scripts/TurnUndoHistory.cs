@@ -13,7 +13,7 @@ namespace FourCore
             public FacingDirection Facing;
             public int Energy, MaximumEnergy, Turn;
             public long Score;
-            public bool[] Core;
+            public int[] Core;
             public GridPosition[] Shields;
             public EnemyManager.Snapshot Enemies;
             public Random.State RandomState;
@@ -67,7 +67,7 @@ namespace FourCore
             score.Restore(saved.Score);
             turns.Restore(saved.Turn);
             playerView.Apply(player);
-            coreView.Apply(core);
+            coreView.Apply(core, animate: false);
             shieldView.Apply(shields);
             enemies.Restore(saved.Enemies);
             Random.state = saved.RandomState;

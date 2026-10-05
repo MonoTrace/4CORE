@@ -45,12 +45,12 @@ namespace FourCore.EditorTools
 
             core.Restore(saved);
             view.Apply(core);
-            if (Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(1)) > 0.001f)
+            if (Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(lines[0].positionCount - 1)) > 0.001f)
             { Result = "FAILED: reconnect did not start from core"; yield break; }
             yield return new WaitForSecondsRealtime(0.25f);
-            float partial = Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(1));
+            float partial = Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(lines[0].positionCount - 1));
             yield return new WaitForSecondsRealtime(0.35f);
-            float full = Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(1));
+            float full = Vector3.Distance(lines[0].GetPosition(0), lines[0].GetPosition(lines[0].positionCount - 1));
             if (!(partial > 0f && partial < full && lines[0].enabled))
             { Result = "FAILED: reconnect interpolation"; yield break; }
 

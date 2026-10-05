@@ -152,7 +152,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 0}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 1
+    widthMultiplier: 0.12
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -303,8 +303,8 @@ MonoBehaviour:
   - {fileID: 8806126144072463665}
   - {fileID: 3216574557370106618}
   - {fileID: 8482596463128469331}
-  coreColor: {r: 1, g: 0.1, b: 0.15, a: 0.45}
-  playerColor: {r: 0.05, g: 0.65, b: 1, a: 0.55}
+  coreColor: {r: 1, g: 0.1, b: 0.15, a: 0.38}
+  playerColor: {r: 0.05, g: 0.65, b: 1, a: 0.38}
   hitStopDuration: 0.12
   blinkInterval: 0.1
   reconnectDuration: 0.5
@@ -846,7 +846,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 0}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 1
+    widthMultiplier: 0.12
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -997,7 +997,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 0}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 1
+    widthMultiplier: 0.12
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -1542,7 +1542,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 0}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 1
+    widthMultiplier: 0.12
     widthCurve:
       serializedVersion: 2
       m_Curve:

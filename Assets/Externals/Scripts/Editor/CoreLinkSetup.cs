@@ -12,11 +12,14 @@ namespace FourCore.EditorTools
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode first.");
             const string materialPath = "Assets/Externals/Datas/PrototypeVisuals/CoreLink.mat";
             Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            Shader energyShader = Shader.Find("4CORE/Core Energy Waves");
+            if (energyShader == null) throw new InvalidOperationException("The 4CORE/Core Energy Waves shader failed to load.");
             if (material == null)
             {
-                material = new Material(Shader.Find("Sprites/Default")) { name = "CoreLink" };
+                material = new Material(energyShader) { name = "CoreLink" };
                 AssetDatabase.CreateAsset(material, materialPath);
             }
+            else material.shader = energyShader;
             const string path = "Assets/Externals/Prefabs/Gameplay/Core.prefab";
             GameObject root = PrefabUtility.LoadPrefabContents(path);
             try
@@ -35,18 +38,27 @@ namespace FourCore.EditorTools
                         GameObject obj = new($"CoreLink{i + 1}", typeof(LineRenderer));
                         obj.transform.SetParent(root.transform, false);
                         line = obj.GetComponent<LineRenderer>();
-                        line.sharedMaterial = material;
                         line.useWorldSpace = true;
-                        line.positionCount = 2;
-                        line.SetPositions(new[] { Vector3.zero, Vector3.zero });
-                        line.startWidth = line.endWidth = 0.035f;
-                        line.numCapVertices = 3;
                         line.sortingOrder = 2;
                         line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                         line.receiveShadows = false;
                         line.enabled = false;
                     }
                     else line = existing.GetComponent<LineRenderer>();
+                    line.sharedMaterial = material;
+                    line.useWorldSpace = true;
+                    line.positionCount = 21;
+                    line.SetPositions(new Vector3[21]);
+                    line.widthMultiplier = 0.12f;
+                    line.sortingOrder = 2;
+                    line.widthCurve = new AnimationCurve(
+                        new Keyframe(0f, 0.72f),
+                        new Keyframe(0.18f, 0.92f),
+                        new Keyframe(0.5f, 1f),
+                        new Keyframe(0.82f, 0.92f),
+                        new Keyframe(1f, 0.72f));
+                    line.numCornerVertices = 4;
+                    line.numCapVertices = 4;
                     array.GetArrayElementAtIndex(i).objectReferenceValue = line;
                 }
                 config.ApplyModifiedPropertiesWithoutUndo();

@@ -23,6 +23,13 @@ namespace FourCore
             return true;
         }
 
+        public void Restore(int current, int total)
+        {
+            Total = Math.Max(0, total);
+            Current = Math.Clamp(current, 0, Total);
+            Changed?.Invoke(Current, Total);
+        }
+
         public bool TrySpend()
         {
             if (Current <= 0) return false;

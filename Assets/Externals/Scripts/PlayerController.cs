@@ -17,6 +17,7 @@ namespace FourCore
         private ShieldState shieldState;
         private ShieldView shieldView;
         private TurnManager turnManager;
+        private TurnUndoHistory undoHistory;
         private KeyControl heldKey;
         private Vector2Int heldDirection;
         private float nextRepeatTime;
@@ -25,6 +26,16 @@ namespace FourCore
             playerState == null ? Vector2Int.zero : new Vector2Int(playerState.Position.X, playerState.Position.Y);
 
         public int CurrentTurn => turnManager == null ? 0 : turnManager.CurrentTurn;
+
+        public void SetUndoHistory(TurnUndoHistory history) => undoHistory = history;
+
+        public bool TryUndo()
+        {
+            ResetHeldInput();
+            bool restored = undoHistory != null && undoHistory.TryUndo();
+            if (!restored) Debug.Log("[UNDO] No earlier turn available (maximum 5 turns).");
+            return restored;
+        }
 
         public void Initialize(
             BoardState board,
@@ -50,6 +61,12 @@ namespace FourCore
             if (keyboard == null)
             {
                 ResetHeldInput();
+                return;
+            }
+
+            if (keyboard.zKey.wasPressedThisFrame)
+            {
+                TryUndo();
                 return;
             }
 
@@ -117,6 +134,7 @@ namespace FourCore
                 return false;
             }
 
+            undoHistory?.RecordBeforeMove();
             playerState.MoveTo(destination, movement);
             playerView.Apply(playerState);
             turnManager.CompletePlayerAction();

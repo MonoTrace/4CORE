@@ -6,13 +6,31 @@ namespace FourCore
     public sealed class GameBootstrap : MonoBehaviour
     {
         [SerializeField] private Color backgroundColor = new(0.008f, 0.014f, 0.032f, 1f);
+        [Header("Gameplay prefabs")]
+        [SerializeField] private PlayerView playerPrefab;
+        [SerializeField] private CoreView corePrefab;
+        [SerializeField] private GameObject shieldPrefab;
+        [SerializeField] private EnemyView[] enemyPrefabs;
+        [SerializeField] private ScorePopup scorePopupPrefab;
+        [Header("Scene HUD")]
+        [SerializeField] private EnergyHud energyHud;
+        [SerializeField] private ScoreHud scoreHud;
 
         private void Awake()
         {
+            if (playerPrefab == null || corePrefab == null || shieldPrefab == null ||
+                energyHud == null || scoreHud == null || enemyPrefabs == null || enemyPrefabs.Length == 0)
+            {
+                Debug.LogError("Assign gameplay prefabs and scene HUD references on GameBootstrap.", this);
+                enabled = false;
+                return;
+            }
+
             gameObject.name = "GameRoot";
             ConfigureCamera();
 
             CoreState coreState = new();
+            ScoreState scoreState = new();
             BoardState boardState = new(coreState);
             PlayerState playerState = new(GameConfig.PlayerStart);
             PlayerEnergyState playerEnergyState = new(4);
@@ -22,25 +40,21 @@ namespace FourCore
             Transform entitiesRoot = CreateContainer("Entities", transform);
             Transform shieldsRoot = CreateContainer("Shields", transform);
             Transform enemiesRoot = CreateContainer("Enemies", entitiesRoot);
-            Transform uiRoot = CreateContainer("UI", transform);
 
             BoardView boardView = boardRoot.gameObject.AddComponent<BoardView>();
             TurnManager turnManager = GetOrAddComponent<TurnManager>(gameObject);
             boardView.Initialize();
 
-            GameObject coreObject = new("Core");
-            coreObject.transform.SetParent(boardRoot, false);
-            CoreView coreView = coreObject.AddComponent<CoreView>();
+            CoreView coreView = Instantiate(corePrefab, boardRoot, false);
+            coreView.name = "Core";
             coreView.Initialize(coreState);
 
             ShieldView shieldView = shieldsRoot.gameObject.AddComponent<ShieldView>();
-            shieldView.Initialize();
+            shieldView.Initialize(shieldPrefab);
 
-            GameObject playerObject = new("Player");
-            playerObject.transform.SetParent(entitiesRoot, false);
-
-            PlayerView playerView = playerObject.AddComponent<PlayerView>();
-            PlayerController playerController = playerObject.AddComponent<PlayerController>();
+            PlayerView playerView = Instantiate(playerPrefab, entitiesRoot, false);
+            playerView.name = "Player";
+            PlayerController playerController = playerView.GetComponent<PlayerController>();
             playerView.Initialize(playerState);
             playerController.Initialize(
                 boardState,
@@ -59,10 +73,16 @@ namespace FourCore
                 playerEnergyState,
                 shieldState,
                 shieldView,
-                turnManager);
+                turnManager,
+                scoreState,
+                enemyPrefabs,
+                scorePopupPrefab);
 
-            EnergyHud energyHud = uiRoot.gameObject.AddComponent<EnergyHud>();
             energyHud.Initialize(playerEnergyState);
+            scoreHud.Initialize(scoreState);
+            playerController.SetUndoHistory(new TurnUndoHistory(
+                playerState, playerView, playerEnergyState, coreState, coreView,
+                shieldState, shieldView, scoreState, turnManager, enemyManager));
         }
 
         private void ConfigureCamera()

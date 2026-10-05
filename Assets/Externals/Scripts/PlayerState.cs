@@ -27,6 +27,12 @@ namespace FourCore
             Facing = MovementToFacing(movement);
         }
 
+        public void Restore(GridPosition position, FacingDirection facing)
+        {
+            Position = position;
+            Facing = facing;
+        }
+
         private static FacingDirection MovementToFacing(Vector2Int movement)
         {
             if (movement == Vector2Int.right) return FacingDirection.Right;

@@ -20,6 +20,12 @@ namespace FourCore
             return positions.Contains(position);
         }
 
+        public void Restore(IEnumerable<GridPosition> saved)
+        {
+            positions.Clear();
+            foreach (GridPosition position in saved) positions.Add(position);
+        }
+
         public bool TryAdd(GridPosition position)
         {
             return positions.Count < capacity && positions.Add(position);

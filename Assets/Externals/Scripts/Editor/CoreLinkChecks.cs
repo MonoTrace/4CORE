@@ -31,7 +31,7 @@ namespace FourCore.EditorTools
 
             int offEdges = 0;
             bool previous = lines[0].enabled;
-            float deadline = Time.unscaledTime + 1f;
+            float deadline = Time.unscaledTime + 3f;
             while (Time.unscaledTime < deadline)
             {
                 if (previous && !lines[0].enabled) offEdges++;

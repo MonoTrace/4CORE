@@ -6,6 +6,7 @@ namespace FourCore
     {
         [SerializeField] private SpriteRenderer pathCellPrefab;
         [SerializeField] private Color pathColor = Color.red;
+        [SerializeField] private bool missilePath;
         [SerializeField] private float[] opacityByStep = { 0.40f, 0.30f, 0.22f, 0.16f, 0.11f, 0.07f };
         private SpriteRenderer[] cells;
         private GridPosition[] positions;
@@ -25,7 +26,7 @@ namespace FourCore
                 }
             }
 
-            int count = state.PredictPath(positions, core);
+            int count = missilePath ? state.PredictMissilePath(positions, core) : state.PredictPath(positions, core);
             for (int i = 0; i < cells.Length; i++)
             {
                 bool visible = i < count && GameConfig.IsInsidePlayable(positions[i]);
@@ -35,7 +36,7 @@ namespace FourCore
                 Vector3 position = GameConfig.LogicalToWorld(positions[i], -0.02f);
                 cells[i].transform.position = gridSpace != null ? gridSpace.TransformPoint(position) : position;
                 cells[i].transform.rotation = gridSpace != null ? gridSpace.rotation : Quaternion.identity;
-                Color color = pathColor;
+                Color color = missilePath && state.MissileReflected ? new Color(0.05f, 0.65f, 1f) : pathColor;
                 color.a = Mathf.Clamp01(opacityByStep[i]);
                 cells[i].color = color;
             }

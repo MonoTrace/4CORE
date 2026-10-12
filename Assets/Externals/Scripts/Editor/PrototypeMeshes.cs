@@ -12,6 +12,7 @@ namespace FourCore.EditorTools
                 EnemyType.Diagonal => CreateSquareMesh(),
                 EnemyType.RightAngle => CreateRightAngleMesh(),
                 EnemyType.Zigzag => CreateHexagonMesh(),
+                EnemyType.Missile => CreateMissileEnemyMesh(),
                 _ => CreateDiamondMesh()
             };
         }
@@ -30,6 +31,23 @@ namespace FourCore.EditorTools
                     new Vector3(-radius, 0f, 0f)
                 },
                 triangles = new[] { 0, 1, 2, 0, 2, 3 }
+            };
+            mesh.RecalculateBounds();
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        private static Mesh CreateMissileEnemyMesh()
+        {
+            Mesh mesh = new()
+            {
+                name = "Missile Enemy T",
+                vertices = new[] {
+                    new Vector3(-0.36f, 0.08f), new Vector3(-0.36f, 0.24f),
+                    new Vector3(0.36f, 0.24f), new Vector3(0.36f, 0.08f),
+                    new Vector3(-0.08f, -0.34f), new Vector3(-0.08f, 0.08f),
+                    new Vector3(0.08f, 0.08f), new Vector3(0.08f, -0.34f) },
+                triangles = new[] { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 }
             };
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();

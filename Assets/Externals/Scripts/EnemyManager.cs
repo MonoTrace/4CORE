@@ -35,6 +35,8 @@ namespace FourCore
         private int spawnIndex;
         private int turnsUntilSpawn;
         private bool spawningStarted;
+        private bool gameOver;
+        public event System.Action AllCoresDestroyed;
 
         public int ActiveEnemyCount => enemies.Count;
 
@@ -127,12 +129,20 @@ namespace FourCore
 
         private void HandleTurnCompleted(int currentTurn)
         {
-            if (!spawningStarted) return;
+            if (!spawningStarted || gameOver) return;
             // Tick existing damage before enemy attacks, so a new hit displays 90.
             coreState.AdvanceRecovery();
             coreView.Apply(coreState);
             playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
             StepEnemies();
+
+            if (coreState.AliveCount == 0)
+            {
+                gameOver = true;
+                RefreshPaths();
+                AllCoresDestroyed?.Invoke();
+                return;
+            }
 
             turnsUntilSpawn--;
             if (turnsUntilSpawn <= 0)
@@ -155,6 +165,7 @@ namespace FourCore
 
             foreach (EnemyRuntime enemy in enemies)
             {
+                if (removedEnemies.Contains(enemy)) continue;
                 if (enemy.State.Position.Equals(playerState.Position))
                 {
                     DamagePlayerAndRemove(enemy);
@@ -163,23 +174,25 @@ namespace FourCore
 
                 if (enemy.State.WaitBeforeMoving()) continue;
 
+                if (enemy.State.MissileActive)
+                {
+                    StepMissile(enemy);
+                    continue;
+                }
+                if (enemy.State.TryFire(coreState)) continue;
+
                 GridPosition destination = enemy.State.GetNextPosition();
+                if (!GameConfig.IsInsideLogical(destination))
+                {
+                    removedEnemies.Add(enemy);
+                    continue;
+                }
                 if (shieldState.Contains(destination))
                 {
                     shieldState.TryRemove(destination);
                     shieldView.Apply(shieldState);
                     playerEnergyState.TryRestore(shieldState.Count);
-                    int coreCount = coreState.AliveCount;
-                    long awarded = scoreState.AddEnemyDefeat(enemy.State.BaseScore, coreCount);
-                    if (awarded > 0 && scorePopupPrefab != null)
-                    {
-                        // Keep the popup alive independently of the destroyed enemy.
-                        ScorePopup popup = Instantiate(scorePopupPrefab, transform, false);
-                        popup.transform.localPosition = GameConfig.LogicalToWorld(destination, -0.3f);
-                        popup.Show(enemy.State.BaseScore, coreCount);
-                    }
-                    Debug.Log($"[SCORE] Enemy={enemy.State.Type} | {enemy.State.BaseScore} x {coreCount} = +{awarded} | Total={scoreState.Total}");
-                    removedEnemies.Add(enemy);
+                    DamageEnemy(enemy, destination);
                     continue;
                 }
 
@@ -205,6 +218,13 @@ namespace FourCore
                 enemy.View.Apply(enemy.State);
             }
 
+            // Also catch an enemy moving onto a reflected projectile later in this turn.
+            foreach (EnemyRuntime owner in enemies)
+            {
+                if (removedEnemies.Contains(owner) || !owner.State.MissileActive || !owner.State.MissileReflected) continue;
+                TryHitEnemyWithMissile(owner, owner.State.MissilePosition);
+            }
+
             foreach (EnemyRuntime enemy in removedEnemies)
             {
                 enemies.Remove(enemy);
@@ -219,9 +239,72 @@ namespace FourCore
             removedEnemies.Add(enemy);
         }
 
+        private void DamageEnemy(EnemyRuntime enemy, GridPosition position)
+        {
+            if (removedEnemies.Contains(enemy) || !enemy.State.TakeDamage()) return;
+            removedEnemies.Add(enemy);
+            int coreCount = coreState.AliveCount;
+            long awarded = scoreState.AddEnemyDefeat(enemy.State.BaseScore, coreCount);
+            if (awarded > 0 && scorePopupPrefab != null)
+            {
+                ScorePopup popup = Instantiate(scorePopupPrefab, transform, false);
+                popup.transform.localPosition = GameConfig.LogicalToWorld(position, -0.3f);
+                popup.Show(enemy.State.BaseScore, coreCount);
+            }
+        }
+
+        private bool TryHitEnemyWithMissile(EnemyRuntime owner, GridPosition position)
+        {
+            foreach (EnemyRuntime target in enemies)
+            {
+                if (removedEnemies.Contains(target) || !target.State.Position.Equals(position)) continue;
+                owner.State.StopMissile();
+                DamageEnemy(target, position);
+                return true;
+            }
+            return false;
+        }
+
+        private void StepMissile(EnemyRuntime owner)
+        {
+            EnemyState state = owner.State;
+            // The player may have stepped onto a projectile before this turn's enemy update.
+            if (!state.MissileReflected && state.MissilePosition.Equals(playerState.Position))
+            {
+                state.StopMissile();
+                playerEnergyState.TrySpend();
+                return;
+            }
+            GridPosition next = state.MissilePosition.Offset(state.MissileDirection);
+            if (!GameConfig.IsInsideLogical(next)) { state.StopMissile(); return; }
+            if (shieldState.TryRemove(next))
+            {
+                shieldView.Apply(shieldState);
+                playerEnergyState.TryRestore(shieldState.Count);
+                state.ReflectMissile(next);
+                return;
+            }
+            if (state.MissileReflected && TryHitEnemyWithMissile(owner, next)) return;
+            if (!state.MissileReflected && next.Equals(playerState.Position))
+            {
+                state.StopMissile();
+                playerEnergyState.TrySpend();
+                return;
+            }
+            if (coreState.Occupies(next))
+            {
+                state.StopMissile();
+                coreState.TryDamage(next, turnManager.CurrentTurn, $"미사일 피격 | 발사 적={owner.View.name}");
+                coreView.Apply(coreState);
+                playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
+                return;
+            }
+            state.MoveMissile(next);
+        }
+
         private void SpawnNextEnemy()
         {
-            EnemyType type = (EnemyType)(spawnIndex % 4);
+            EnemyType type = (EnemyType)(spawnIndex % System.Enum.GetValues(typeof(EnemyType)).Length);
             EnemyState state = CreateEnemyState(type);
             spawnIndex++;
 
@@ -233,7 +316,8 @@ namespace FourCore
 
         private EnemyState CreateEnemyState(EnemyType type)
         {
-            return EnemySpawnFactory.Create(type, entryDelayTurns, Random.Range(0, 4));
+            return EnemySpawnFactory.Create(type, entryDelayTurns, Random.Range(0, 4),
+                type == EnemyType.Missile ? Random.Range(5, 8) : 5);
         }
 
         private void OnDestroy()

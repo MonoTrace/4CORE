@@ -13,6 +13,61 @@ namespace FourCore.EditorTools
         private const string PrefabFolder = "Assets/Externals/Prefabs/Gameplay";
         private const string ArtFolder = "Assets/Externals/Datas/PrototypeVisuals";
 
+        [MenuItem("4CORE/Set Up Missile Enemy")]
+        public static void SetUpMissileEnemy()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode first.");
+            GameBootstrap bootstrap = UnityEngine.Object.FindAnyObjectByType<GameBootstrap>();
+            if (bootstrap == null) throw new InvalidOperationException("Open the gameplay scene first.");
+            SpriteRenderer pathCell = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabFolder + "/PathCell.prefab")
+                .GetComponent<SpriteRenderer>();
+            GameObject prefab = GetOrCreatePrefab("Enemies/MissileEnemy", () =>
+            {
+                GameObject root = new("MissileEnemy");
+                EnemyView view = root.AddComponent<EnemyView>();
+                Color magenta = new(1f, 0.15f, 0.85f);
+                AddVisual(root.transform, "Visual", GetMesh("Missile", () => PrototypeMeshes.CreateEnemyMesh(EnemyType.Missile)),
+                    GetMaterial("Missile", magenta), Vector3.zero, Vector3.one, 8);
+                SerializedObject config = new(view);
+                config.FindProperty("enemyType").intValue = (int)EnemyType.Missile;
+                config.FindProperty("missilePrefab").objectReferenceValue = pathCell;
+                for (int i = 0; i < 2; i++)
+                {
+                    GameObject child = new(i == 0 ? "PathView" : "MissilePathView");
+                    child.transform.SetParent(root.transform, false);
+                    EnemyPathView path = child.AddComponent<EnemyPathView>();
+                    SerializedObject pathConfig = new(path);
+                    pathConfig.FindProperty("pathCellPrefab").objectReferenceValue = pathCell;
+                    pathConfig.FindProperty("pathColor").colorValue = magenta;
+                    pathConfig.FindProperty("missilePath").boolValue = i == 1;
+                    if (i == 1)
+                    {
+                        SerializedProperty opacities = pathConfig.FindProperty("opacityByStep");
+                        opacities.arraySize = GameConfig.LogicalGridSize;
+                        for (int j = 0; j < opacities.arraySize; j++) opacities.GetArrayElementAtIndex(j).floatValue = 0.24f;
+                    }
+                    pathConfig.ApplyModifiedPropertiesWithoutUndo();
+                    config.FindProperty(i == 0 ? "pathView" : "missilePathView").objectReferenceValue = path;
+                }
+                config.ApplyModifiedPropertiesWithoutUndo();
+                return root;
+            });
+            SerializedObject boot = new(bootstrap);
+            SerializedProperty list = boot.FindProperty("enemyPrefabs");
+            bool assigned = false;
+            for (int i = 0; i < list.arraySize; i++)
+                if (list.GetArrayElementAtIndex(i).objectReferenceValue == prefab.GetComponent<EnemyView>()) assigned = true;
+            if (!assigned)
+            {
+                int index = list.arraySize++;
+                list.GetArrayElementAtIndex(index).objectReferenceValue = prefab.GetComponent<EnemyView>();
+            }
+            boot.ApplyModifiedProperties();
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.MarkSceneDirty(bootstrap.gameObject.scene);
+            EditorSceneManager.SaveScene(bootstrap.gameObject.scene);
+        }
+
         [MenuItem("4CORE/Set Up Gameplay Prefabs and Scene HUD")]
         public static void Run()
         {

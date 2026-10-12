@@ -8,7 +8,7 @@ namespace FourCore
             new(GameConfig.CoreMax, GameConfig.CoreMin),
             new(GameConfig.CoreMin, GameConfig.CoreMax),
             new(GameConfig.CoreMax, GameConfig.CoreMax)
-        };
+        }; 
 
         private readonly bool[] alive = { true, true, true, true };
         private readonly int[] recoveryTurns = new int[4];

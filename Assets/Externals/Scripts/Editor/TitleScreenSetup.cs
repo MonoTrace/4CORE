@@ -9,6 +9,60 @@ namespace FourCore.EditorTools
 {
     public static class TitleScreenSetup
     {
+        [MenuItem("4CORE/Set Up Game Over Screen")]
+        public static void SetUpGameOver()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode first.");
+            GameFlowController flow = UnityEngine.Object.FindAnyObjectByType<GameFlowController>();
+            if (flow == null) throw new InvalidOperationException("Title screen GameFlowController required.");
+            SerializedObject config = new(flow);
+            if (config.FindProperty("gameOverGroup").objectReferenceValue != null) return;
+            GameObject root = new("GameOverScreen", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup),
+                typeof(UnityEngine.UI.CanvasScaler), typeof(UnityEngine.UI.GraphicRaycaster));
+            Undo.RegisterCreatedObjectUndo(root, "Create game over screen");
+            Canvas canvas = root.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 300;
+            UnityEngine.UI.CanvasScaler scaler = root.GetComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+            GameObject backdrop = new("Backdrop", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            backdrop.transform.SetParent(root.transform, false);
+            RectTransform backdropRect = backdrop.GetComponent<RectTransform>();
+            backdropRect.anchorMin = Vector2.zero;
+            backdropRect.anchorMax = Vector2.one;
+            backdropRect.offsetMin = backdropRect.offsetMax = Vector2.zero;
+            backdrop.GetComponent<UnityEngine.UI.Image>().color = new Color(0.005f, 0.012f, 0.025f, 0.85f);
+            GameObject panel = new("Menu", typeof(RectTransform));
+            panel.transform.SetParent(root.transform, false);
+            RectTransform rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(600f, 400f);
+            Label(panel.transform, "Title", "GAME OVER", 64f, new Vector2(0f, 130f), new Vector2(600f, 100f),
+                new Color(1f, 0.2f, 0.25f));
+            TextMeshProUGUI title = panel.transform.Find("Title").GetComponent<TextMeshProUGUI>();
+            title.rectTransform.anchorMin = title.rectTransform.anchorMax = title.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            title.alignment = TextAlignmentOptions.Center;
+            UnityEngine.UI.Button retry = Button(panel.transform, "RetryButton", "RETRY", 0f);
+            UnityEngine.UI.Button menu = Button(panel.transform, "MenuButton", "MENU", -105f);
+            foreach (UnityEngine.UI.Button button in new[] { retry, menu })
+            {
+                RectTransform buttonRect = button.GetComponent<RectTransform>();
+                buttonRect.anchorMin = buttonRect.anchorMax = buttonRect.pivot = new Vector2(0.5f, 0.5f);
+                TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
+                label.rectTransform.anchorMin = label.rectTransform.anchorMax = label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                label.rectTransform.anchoredPosition = Vector2.zero;
+                label.alignment = TextAlignmentOptions.Center;
+            }
+            config.FindProperty("gameOverGroup").objectReferenceValue = root.GetComponent<CanvasGroup>();
+            config.FindProperty("retryButton").objectReferenceValue = retry;
+            config.FindProperty("menuButton").objectReferenceValue = menu;
+            config.ApplyModifiedProperties();
+            root.SetActive(false);
+            EditorSceneManager.MarkSceneDirty(flow.gameObject.scene);
+            EditorSceneManager.SaveScene(flow.gameObject.scene);
+        }
         [MenuItem("4CORE/Set Up Title Screen")]
         public static void Run()
         {

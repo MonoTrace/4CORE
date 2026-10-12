@@ -7,7 +7,7 @@ namespace FourCore
     {
         // Rotate the complete pattern around the board centre, including its turn point.
         // The random choice belongs to the spawner, never movement/path prediction.
-        public static EnemyState Create(EnemyType type, int entryDelay, int quarterTurns)
+        public static EnemyState Create(EnemyType type, int entryDelay, int quarterTurns, int missileDistance = 5)
         {
             if (quarterTurns < 0 || quarterTurns > 3)
                 throw new ArgumentOutOfRangeException(nameof(quarterTurns));
@@ -19,6 +19,11 @@ namespace FourCore
             switch (type)
             {
                 case EnemyType.Straight:
+                    break;
+                case EnemyType.Missile:
+                    start = new GridPosition(0, GameConfig.CoreMax + Mathf.Clamp(missileDistance, 5, 7));
+                    direction = Vector2Int.right;
+                    secondary = Vector2Int.down;
                     break;
                 case EnemyType.Diagonal:
                     start = new GridPosition(0, GameConfig.LogicalGridSize - 1);

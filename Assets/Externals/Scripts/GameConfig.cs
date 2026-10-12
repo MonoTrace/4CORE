@@ -15,6 +15,8 @@ namespace FourCore
         public const float CellSize = 1f;
 
         public static readonly GridPosition PlayerStart = new(11, 14);
+        public static bool IsInsideLogical(GridPosition position) => position.X >= 0 && position.Y >= 0 &&
+            position.X < LogicalGridSize && position.Y < LogicalGridSize;
 
         public static bool IsInsidePlayable(GridPosition position)
         {

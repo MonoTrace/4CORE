@@ -67,7 +67,7 @@ namespace FourCore
 
             EnemyManager enemyManager = enemiesRoot.gameObject.AddComponent<EnemyManager>();
             CoreLinkView links = coreView.GetComponent<CoreLinkView>();
-            if (links != null) links.Initialize(coreState, coreView, playerView.transform, playerController);
+            if (links != null) links.Initialize(coreState, coreView, playerView.transform, playerController, gameFlow);
             enemyManager.Initialize(
                 coreState,
                 coreView,

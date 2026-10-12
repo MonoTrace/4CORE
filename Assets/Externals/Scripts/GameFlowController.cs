@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FourCore
 {
-    public enum GameFlowState { Title, Starting, Playing }
+    public enum GameFlowState { Title, Starting, Playing, GameOver }
     public enum IntroStage { None, Camera, Grid, Entities, Complete }
 
     public sealed class GameFlowController : MonoBehaviour
@@ -14,6 +14,14 @@ namespace FourCore
         [SerializeField] private UnityEngine.UI.Button startButton;
         [SerializeField] private UnityEngine.UI.Button quitButton;
         [SerializeField] private CinemachineCamera sceneCamera;
+        [Header("Game over")]
+        [SerializeField] private CanvasGroup gameOverGroup;
+        [SerializeField] private UnityEngine.UI.Button retryButton;
+        [SerializeField] private UnityEngine.UI.Button menuButton;
+        private static bool retryOnLoad;
+        private bool loadingScene;
+        private bool ownsGameOverPause;
+        private float gameOverTimeScale;
         [SerializeField, Min(0.1f)] private float transitionDuration = 1.5f;
         [SerializeField, Min(0.1f)] private float gridFadeDuration = 0.6f;
         [SerializeField, Min(0.1f)] private float entitiesFadeDuration = 0.7f;
@@ -30,12 +38,46 @@ namespace FourCore
         private PlayerController controls;
         private EnemyManager enemies;
         private bool initialized;
+        private bool damageCameraActive;
+        private Vector3 damageCameraOrigin;
+        private float damageCameraZoom;
+
+        public void BeginCoreDamageFocus()
+        {
+            if (!initialized || State != GameFlowState.Playing || damageCameraActive) return;
+            damageCameraOrigin = sceneCamera != null ? sceneCamera.transform.position : output.transform.position;
+            damageCameraZoom = sceneCamera != null ? sceneCamera.Lens.OrthographicSize : output.orthographicSize;
+            damageCameraActive = true;
+        }
+
+        public void SetCoreDamageFocus(float amount)
+        {
+            if (!damageCameraActive) return;
+            float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(amount));
+            Vector3 focus = player.position;
+            focus.z = damageCameraOrigin.z;
+            SetCamera(Vector3.Lerp(damageCameraOrigin, focus, eased),
+                Mathf.Lerp(damageCameraZoom, Mathf.Min(damageCameraZoom, 4f), eased));
+        }
+
+        public void EndCoreDamageFocus()
+        {
+            if (!damageCameraActive) return;
+            SetCamera(damageCameraOrigin, damageCameraZoom);
+            damageCameraActive = false;
+        }
 
         public void Initialize(Camera output, Transform player, BoardView board, GameObject core,
             PlayerController controls, EnemyManager enemies)
         {
             this.output = output; this.player = player; this.board = board;
             this.core = core; this.controls = controls; this.enemies = enemies;
+            if (gameOverGroup == null || retryButton == null || menuButton == null)
+                throw new System.InvalidOperationException("Set up the Game Over screen using 4CORE/Set Up Game Over Screen.");
+            gameOverGroup.gameObject.SetActive(false);
+            retryButton.onClick.AddListener(Retry);
+            menuButton.onClick.AddListener(ReturnToMenu);
+            enemies.AllCoresDestroyed += HandleGameOver;
             RestoreCanvasRootScale(titleGroup);
             RestoreCanvasRootScale(hudGroup);
             titleGroup.gameObject.SetActive(true);
@@ -53,6 +95,63 @@ namespace FourCore
             State = GameFlowState.Title;
             initialized = true;
             SetCamera(TitlePosition(), titleZoom);
+            if (retryOnLoad)
+            {
+                retryOnLoad = false;
+                StartCoroutine(StartRetry());
+            }
+        }
+
+        private IEnumerator StartRetry()
+        {
+            yield return null;
+            BeginGame();
+        }
+
+        private void HandleGameOver()
+        {
+            if (State != GameFlowState.Playing) return;
+            State = GameFlowState.GameOver;
+            controls.SetGameplayInput(false);
+            StartCoroutine(ShowGameOver());
+        }
+
+        private IEnumerator ShowGameOver()
+        {
+            // Let the final core's zoom/blink/zoom-out finish before the menu appears.
+            while (controls.PresentationInputLocked) yield return null;
+            EndCoreDamageFocus();
+            gameOverTimeScale = Time.timeScale;
+            ownsGameOverPause = true;
+            Time.timeScale = 0f;
+            gameOverGroup.gameObject.SetActive(true);
+            gameOverGroup.transform.SetAsLastSibling();
+            gameOverGroup.alpha = 1f;
+            gameOverGroup.interactable = gameOverGroup.blocksRaycasts = true;
+            hudGroup.interactable = hudGroup.blocksRaycasts = false;
+            if (UnityEngine.EventSystems.EventSystem.current != null)
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(retryButton.gameObject);
+        }
+
+        public void Retry() => ReloadGame(true);
+        public void ReturnToMenu() => ReloadGame(false);
+
+        private void ReloadGame(bool startImmediately)
+        {
+            if (State != GameFlowState.GameOver || loadingScene) return;
+            loadingScene = true;
+            retryOnLoad = startImmediately;
+            gameOverGroup.interactable = gameOverGroup.blocksRaycasts = false;
+            ReleaseGameOverPause();
+            UnityEngine.SceneManagement.Scene scene = gameObject.scene;
+            UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(scene.path);
+        }
+
+        private void ReleaseGameOverPause()
+        {
+            if (!ownsGameOverPause) return;
+            Time.timeScale = gameOverTimeScale;
+            ownsGameOverPause = false;
         }
 
         private static void RestoreCanvasRootScale(CanvasGroup group)
@@ -179,6 +278,10 @@ namespace FourCore
 
         private void OnDestroy()
         {
+            ReleaseGameOverPause();
+            if (enemies != null) enemies.AllCoresDestroyed -= HandleGameOver;
+            if (retryButton != null) retryButton.onClick.RemoveListener(Retry);
+            if (menuButton != null) menuButton.onClick.RemoveListener(ReturnToMenu);
             worldFade?.Dispose();
             if (startButton != null) startButton.onClick.RemoveListener(BeginGame);
             if (quitButton != null) quitButton.onClick.RemoveListener(Quit);

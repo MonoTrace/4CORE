@@ -13,8 +13,10 @@ namespace FourCore
         [SerializeField, Min(0.1f)] private float waveCycles = 2.25f;
         [SerializeField, Min(0f)] private float waveSpeed = 1.8f;
         [SerializeField, Min(0f)] private float secondaryWaveAmplitude = 0.022f;
-        [SerializeField, Min(0.01f)] private float hitStopDuration = 0.12f;
-        [SerializeField, Min(0.01f)] private float blinkInterval = 0.1f;
+        [SerializeField, Min(0.01f)] private float zoomInDuration = 0.08f;
+        [SerializeField, Min(0.01f)] private float damageBlinkInterval = 0.04f;
+        [SerializeField, Min(0.01f)] private float breakFadeDuration = 0.04f;
+        [SerializeField, Min(0.01f)] private float zoomOutDuration = 0.08f;
         [SerializeField, Min(0.01f)] private float reconnectDuration = 0.5f;
         private CoreView coreView;
         private Transform player;
@@ -26,12 +28,17 @@ namespace FourCore
         private float stopRemaining;
         private float previousTimeScale;
         private bool ownsHitStop;
+        private GameFlowController gameFlow;
+        private float damageSequenceAge;
+        private float BreakDuration => zoomInDuration + damageBlinkInterval * 5f + breakFadeDuration;
 
-        public void Initialize(CoreState state, CoreView view, Transform player, PlayerController controls)
+        public void Initialize(CoreState state, CoreView view, Transform player, PlayerController controls,
+            GameFlowController gameFlow = null)
         {
             if (lines == null || lines.Length != state.CellCount)
                 throw new System.InvalidOperationException("Assign one connection line per core cell.");
             coreView = view; this.player = player; this.controls = controls;
+            this.gameFlow = gameFlow;
             alive = new bool[state.CellCount]; phases = new LinkPhase[state.CellCount]; ages = new float[state.CellCount];
             foreach (LineRenderer line in lines)
             {
@@ -90,13 +97,16 @@ namespace FourCore
                 ownsHitStop = true;
                 Time.timeScale = 0f;
                 controls.SetPresentationInputLock(true);
+                damageSequenceAge = 0f;
+                gameFlow?.BeginCoreDamageFocus();
             }
-            stopRemaining = hitStopDuration;
+            stopRemaining = BreakDuration + zoomOutDuration;
         }
 
         private void ReleaseHitStop()
         {
             if (!ownsHitStop) return;
+            gameFlow?.EndCoreDamageFocus();
             Time.timeScale = previousTimeScale;
             ownsHitStop = false;
             stopRemaining = 0f;
@@ -110,12 +120,17 @@ namespace FourCore
             if (ownsHitStop)
             {
                 stopRemaining -= dt;
+                damageSequenceAge += dt;
+                float focus = damageSequenceAge < zoomInDuration
+                    ? damageSequenceAge / zoomInDuration
+                    : 1f - Mathf.Clamp01((damageSequenceAge - BreakDuration) / zoomOutDuration);
+                gameFlow?.SetCoreDamageFocus(focus);
                 if (stopRemaining <= 0f) ReleaseHitStop();
             }
             for (int i = 0; i < ages.Length; i++)
             {
                 ages[i] += dt;
-                if (phases[i] == LinkPhase.Breaking && ages[i] >= hitStopDuration + blinkInterval * 6f)
+                if (phases[i] == LinkPhase.Breaking && ages[i] >= BreakDuration)
                     phases[i] = LinkPhase.Disconnected;
                 if (phases[i] == LinkPhase.Reconnecting && ages[i] >= reconnectDuration)
                     phases[i] = LinkPhase.Connected;
@@ -129,11 +144,15 @@ namespace FourCore
             {
                 bool visible = phases[i] != LinkPhase.Disconnected && visibility > 0f;
                 float progress = 1f;
+                float damageOpacity = 1f;
                 if (phases[i] == LinkPhase.Breaking)
                 {
-                    float blinkAge = ages[i] - hitStopDuration;
-                    // Three explicit ON/OFF pairs after the hit stop, no smooth pulsing.
-                    if (blinkAge >= 0f) visible &= Mathf.FloorToInt(blinkAge / blinkInterval) % 2 == 0;
+                    float blinkAge = ages[i] - zoomInDuration;
+                    // Keep the link visible during zoom-in, then blink three times.
+                    if (blinkAge >= 0f && blinkAge < damageBlinkInterval * 5f)
+                        visible &= Mathf.FloorToInt(blinkAge / damageBlinkInterval) % 2 == 0;
+                    if (blinkAge >= damageBlinkInterval * 5f)
+                        damageOpacity = 1f - Mathf.Clamp01((blinkAge - damageBlinkInterval * 5f) / breakFadeDuration);
                 }
                 if (phases[i] == LinkPhase.Reconnecting)
                 {
@@ -163,7 +182,7 @@ namespace FourCore
                     line.SetPosition(pointIndex, point);
                 }
                 Color start = coreColor, end = playerColor;
-                start.a *= visibility; end.a *= visibility;
+                start.a *= visibility * damageOpacity; end.a *= visibility * damageOpacity;
                 line.startColor = start; line.endColor = end;
             }
         }

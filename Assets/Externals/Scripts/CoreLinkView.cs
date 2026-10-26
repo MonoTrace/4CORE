@@ -30,6 +30,11 @@ namespace FourCore
         private bool ownsHitStop;
         private GameFlowController gameFlow;
         private float damageSequenceAge;
+        private RunState run;
+        private PlayerEnergyState energy;
+        private float waveTime;
+        public void SetRun(RunState run)=>this.run=run;
+        public void SetEnergy(PlayerEnergyState energy)=>this.energy=energy;
         private float BreakDuration => zoomInDuration + damageBlinkInterval * 5f + breakFadeDuration;
 
         public void Initialize(CoreState state, CoreView view, Transform player, PlayerController controls,
@@ -117,6 +122,7 @@ namespace FourCore
         {
             if (alive == null) return;
             float dt = Time.unscaledDeltaTime;
+            if(!ownsHitStop&&Time.timeScale>0f&&(run==null||run.FreezeMoves==0))waveTime+=dt;
             if (ownsHitStop)
             {
                 stopRemaining -= dt;
@@ -140,6 +146,7 @@ namespace FourCore
 
         private void RenderLines()
         {
+            int availableIndex=0;
             for (int i = 0; i < lines.Length; i++)
             {
                 bool visible = phases[i] != LinkPhase.Disconnected && visibility > 0f;
@@ -169,7 +176,7 @@ namespace FourCore
                 Vector3 perpendicular = direction.sqrMagnitude > 0.0001f
                     ? new Vector3(-direction.y, direction.x, 0f).normalized
                     : Vector3.up;
-                float time = Time.unscaledTime * waveSpeed;
+                float time = waveTime * waveSpeed;
                 for (int pointIndex = 0; pointIndex < WavePointCount; pointIndex++)
                 {
                     float t = pointIndex / (float)(WavePointCount - 1);
@@ -182,6 +189,11 @@ namespace FourCore
                     line.SetPosition(pointIndex, point);
                 }
                 Color start = coreColor, end = playerColor;
+                if(alive[i])
+                {
+                    if(energy!=null&&availableIndex>=energy.Current){end.r*=.3f;end.g*=.3f;end.b*=.3f;end.a*=.45f;}
+                    availableIndex++;
+                }
                 start.a *= visibility * damageOpacity; end.a *= visibility * damageOpacity;
                 line.startColor = start; line.endColor = end;
             }

@@ -15,6 +15,11 @@ namespace FourCore
         [Header("Scene HUD")]
         [SerializeField] private ScoreHud scoreHud;
         [SerializeField] private GameFlowController gameFlow;
+        [Header("Run features")]
+        [SerializeField] private PickupView pickupViewPrefab;
+        [SerializeField] private BossView bossViewPrefab;
+        [SerializeField] private RunPresentation runPresentation;
+        [SerializeField] private AmbientView ambientPrefab;
 
         private void Awake()
         {
@@ -68,6 +73,8 @@ namespace FourCore
             EnemyManager enemyManager = enemiesRoot.gameObject.AddComponent<EnemyManager>();
             CoreLinkView links = coreView.GetComponent<CoreLinkView>();
             if (links != null) links.Initialize(coreState, coreView, playerView.transform, playerController, gameFlow);
+            if(links!=null)links.SetRun(enemyManager.Run);
+            if(links!=null)links.SetEnergy(playerEnergyState);
             enemyManager.Initialize(
                 coreState,
                 coreView,
@@ -80,13 +87,19 @@ namespace FourCore
                 enemyPrefabs,
                 scorePopupPrefab,
                 startImmediately: gameFlow == null);
+            PickupView pickups = pickupViewPrefab != null ? Instantiate(pickupViewPrefab,entitiesRoot,false) : null;
+            BossView boss = bossViewPrefab != null ? Instantiate(bossViewPrefab,entitiesRoot,false) : null;
+            enemyManager.ConfigureFeatures(pickups,boss);
+            if(ambientPrefab!=null)Instantiate(ambientPrefab,transform,false).Initialize(enemyManager);
+            playerController.SetEncounter(enemyManager);
+            if (runPresentation != null) runPresentation.Initialize(enemyManager,playerController,playerView);
 
             scoreHud.Initialize(scoreState);
             playerController.SetUndoHistory(new TurnUndoHistory(
                 playerState, playerView, playerEnergyState, coreState, coreView,
                 shieldState, shieldView, scoreState, turnManager, enemyManager));
             if (gameFlow != null)
-                gameFlow.Initialize(Camera.main, playerView.transform, boardView, coreView.gameObject, playerController, enemyManager);
+                gameFlow.Initialize(Camera.main, playerView.transform, boardView, coreView.gameObject, playerController, enemyManager,scoreState);
         }
 
         private void ConfigureCamera()

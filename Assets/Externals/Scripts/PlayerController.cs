@@ -18,6 +18,11 @@ namespace FourCore
         private ShieldView shieldView;
         private TurnManager turnManager;
         private TurnUndoHistory undoHistory;
+        private EnemyManager encounter;
+        public event System.Action<string> ActionNotice;
+        public event System.Action ActionTaken;
+        public event System.Action ActionUndone;
+        public void SetEncounter(EnemyManager encounter) => this.encounter = encounter;
         public bool GameplayInputEnabled { get; private set; } = true;
         public bool PresentationInputLocked { get; private set; }
         public void SetPresentationInputLock(bool locked) => PresentationInputLocked = locked;
@@ -44,6 +49,7 @@ namespace FourCore
             ResetHeldInput();
             bool restored = undoHistory != null && undoHistory.TryUndo();
             if (!restored) Debug.Log("[UNDO] No earlier turn available (maximum 5 turns).");
+            if(restored)ActionUndone?.Invoke();else ActionNotice?.Invoke("NO UNDO");
             return restored;
         }
 
@@ -82,6 +88,9 @@ namespace FourCore
             }
 
             if (PresentationInputLocked) return;
+
+            if (keyboard.xKey.wasPressedThisFrame)
+            { TryWait(); ResetHeldInput(); return; }
 
             if (keyboard.spaceKey.wasPressedThisFrame)
             {
@@ -143,7 +152,7 @@ namespace FourCore
             }
 
             GridPosition destination = playerState.Position.Offset(movement);
-            if (!boardState.CanPlayerEnter(destination))
+            if (!boardState.CanPlayerEnter(destination) || (encounter != null && encounter.BossOccupies(destination)))
             {
                 return false;
             }
@@ -151,8 +160,18 @@ namespace FourCore
             undoHistory?.RecordBeforeMove();
             playerState.MoveTo(destination, movement);
             playerView.Apply(playerState);
+            encounter?.CollectPickup();
             turnManager.CompletePlayerAction();
+            ActionTaken?.Invoke();
             return true;
+        }
+
+        public bool TryWait()
+        {
+            if (!GameplayInputEnabled || PresentationInputLocked || turnManager == null) return false;
+            undoHistory?.RecordBeforeMove();
+            turnManager.CompletePlayerAction(PlayerActionKind.Wait);
+            ActionTaken?.Invoke(); return true;
         }
 
         public bool TryToggleShield()
@@ -177,6 +196,7 @@ namespace FourCore
             {
                 if (!playerEnergyState.TrySpend())
                 {
+                    ActionNotice?.Invoke("NO ENERGY");
                     return false;
                 }
 
@@ -193,6 +213,7 @@ namespace FourCore
             }
 
             shieldView.Apply(shieldState);
+            ActionTaken?.Invoke();
             return true;
         }
     }

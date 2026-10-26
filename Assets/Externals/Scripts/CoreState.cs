@@ -2,6 +2,7 @@ namespace FourCore
 {
     public sealed class CoreState
     {
+        public event System.Action Changed;
         private readonly GridPosition[] cells =
         {
             new(GameConfig.CoreMin, GameConfig.CoreMin),
@@ -35,22 +36,36 @@ namespace FourCore
 
         public int GetRecoveryTurns(int index) => recoveryTurns[index];
 
+        public bool TryRecoverOne()
+        {
+            int chosen = -1;
+            for (int i = 0; i < alive.Length; i++)
+                if (!alive[i] && (chosen < 0 || recoveryTurns[i] > recoveryTurns[chosen])) chosen = i;
+            if (chosen < 0) return false;
+            alive[chosen] = true; recoveryTurns[chosen] = 0;
+            Changed?.Invoke();
+            return true;
+        }
+
         public int[] Capture() => (int[])recoveryTurns.Clone();
 
         public void Restore(int[] saved)
         {
             System.Array.Copy(saved, recoveryTurns, recoveryTurns.Length);
             for (int i = 0; i < alive.Length; i++) alive[i] = recoveryTurns[i] == 0;
+            Changed?.Invoke();
         }
 
         public void AdvanceRecovery()
         {
+            bool recovered = false;
             for (int i = 0; i < alive.Length; i++)
             {
                 if (recoveryTurns[i] <= 0) continue;
                 recoveryTurns[i]--;
-                if (recoveryTurns[i] == 0) alive[i] = true;
+                if (recoveryTurns[i] == 0) { alive[i] = true; recovered = true; }
             }
+            if (recovered) Changed?.Invoke();
         }
 
         public bool Occupies(GridPosition position)
@@ -74,6 +89,7 @@ namespace FourCore
                 {
                     alive[index] = false;
                     recoveryTurns[index] = RecoveryDuration;
+                    Changed?.Invoke();
                     UnityEngine.Debug.Log(
                         $"[CORE DESTROYED] 턴={turn} | 코어 칸={index + 1}, 논리 좌표={position} | 원인={reason}");
                     return true;

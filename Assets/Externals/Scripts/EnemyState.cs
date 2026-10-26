@@ -14,7 +14,16 @@ namespace FourCore
     public sealed class EnemyState
     {
         public EnemyType Type { get; }
-        public int BaseScore => Type switch
+        public EnemyTraits Traits { get; private set; }
+        public int MoveCount { get; private set; }
+        public bool CountsTowardStage { get; private set; } = true;
+        public bool IsFragment { get; private set; }
+        public bool BodyVisible => (Traits & EnemyTraits.Phase)==0 || MoveCount==0 || MoveCount%2==1;
+        public EnemyState WithTraits(EnemyTraits traits){Traits=traits;return this;}
+        public EnemyState AsFragment(){IsFragment=true;CountsTowardStage=false;return this;}
+        public bool Armored { get; private set; }
+        public EnemyState WithArmor(){Armored=true;Life=2;return this;}
+        public int BaseScore => (Type switch
         {
             EnemyType.Straight => 10,
             EnemyType.Diagonal => 20,
@@ -22,7 +31,7 @@ namespace FourCore
             EnemyType.Zigzag => 40,
             EnemyType.Missile => 40,
             _ => 0
-        };
+        })*(Armored?2:1);
         public GridPosition Position { get; private set; }
         public Vector2Int Direction { get; private set; }
         public int EntryDelay { get; private set; }
@@ -165,6 +174,7 @@ namespace FourCore
         public void MoveTo(GridPosition position)
         {
             Position = position;
+            MoveCount++;
             if (Type == EnemyType.Zigzag)
             {
                 useSecondaryDirection = !useSecondaryDirection;

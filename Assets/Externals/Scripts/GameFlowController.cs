@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FourCore
 {
-    public enum GameFlowState { Title, Starting, Playing, GameOver }
+    public enum GameFlowState { Title, Starting, Playing, GameOver, Reward }
     public enum IntroStage { None, Camera, Grid, Entities, Complete }
 
     public sealed class GameFlowController : MonoBehaviour
@@ -12,15 +12,27 @@ namespace FourCore
         [SerializeField] private CanvasGroup titleGroup;
         [SerializeField] private CanvasGroup hudGroup;
         [SerializeField] private UnityEngine.UI.Button startButton;
+        [SerializeField] private UnityEngine.UI.Button stageModeButton;
+        [SerializeField] private UnityEngine.UI.Button infiniteModeButton;
         [SerializeField] private UnityEngine.UI.Button quitButton;
         [SerializeField] private CinemachineCamera sceneCamera;
         [Header("Game over")]
         [SerializeField] private CanvasGroup gameOverGroup;
         [SerializeField] private UnityEngine.UI.Button retryButton;
         [SerializeField] private UnityEngine.UI.Button menuButton;
+        [Header("Between chapters")]
+        [SerializeField] private CanvasGroup rewardGroup;
+        [SerializeField] private UnityEngine.UI.Button freezeReward;
+        [SerializeField] private UnityEngine.UI.Button shieldReward;
+        [SerializeField] private UnityEngine.UI.Button repairReward;
+        [SerializeField] private TMPro.TMP_Text resultScore;
+        private ScoreState score;
         private static bool retryOnLoad;
+        private static GameMode retryMode;
+        public GameMode SelectedMode { get; private set; } = GameMode.Stage;
         private bool loadingScene;
         private bool ownsGameOverPause;
+        private bool stageVictory;
         private float gameOverTimeScale;
         [SerializeField, Min(0.1f)] private float transitionDuration = 1.5f;
         [SerializeField, Min(0.1f)] private float gridFadeDuration = 0.6f;
@@ -68,16 +80,26 @@ namespace FourCore
         }
 
         public void Initialize(Camera output, Transform player, BoardView board, GameObject core,
-            PlayerController controls, EnemyManager enemies)
+            PlayerController controls, EnemyManager enemies,ScoreState score=null)
         {
             this.output = output; this.player = player; this.board = board;
             this.core = core; this.controls = controls; this.enemies = enemies;
+            this.score=score;
             if (gameOverGroup == null || retryButton == null || menuButton == null)
                 throw new System.InvalidOperationException("Set up the Game Over screen using 4CORE/Set Up Game Over Screen.");
             gameOverGroup.gameObject.SetActive(false);
             retryButton.onClick.AddListener(Retry);
             menuButton.onClick.AddListener(ReturnToMenu);
             enemies.AllCoresDestroyed += HandleGameOver;
+            enemies.AllStagesCleared += HandleStageClear;
+            enemies.RewardRequested+=ShowReward;
+            if(rewardGroup!=null)
+            {
+                rewardGroup.gameObject.SetActive(false);
+                freezeReward.onClick.AddListener(ChooseFreeze);
+                shieldReward.onClick.AddListener(ChooseShield);
+                repairReward.onClick.AddListener(ChooseRepair);
+            }
             RestoreCanvasRootScale(titleGroup);
             RestoreCanvasRootScale(hudGroup);
             titleGroup.gameObject.SetActive(true);
@@ -90,7 +112,9 @@ namespace FourCore
             hudGroup.interactable = hudGroup.blocksRaycasts = false;
             titleGroup.alpha = 1f;
             titleGroup.interactable = titleGroup.blocksRaycasts = true;
-            startButton.onClick.AddListener(BeginGame);
+            if(stageModeButton!=null)stageModeButton.onClick.AddListener(BeginStageMode);
+            else if(startButton!=null)startButton.onClick.AddListener(BeginGame);
+            if(infiniteModeButton!=null)infiniteModeButton.onClick.AddListener(BeginInfiniteMode);
             quitButton.onClick.AddListener(Quit);
             State = GameFlowState.Title;
             initialized = true;
@@ -105,14 +129,44 @@ namespace FourCore
         private IEnumerator StartRetry()
         {
             yield return null;
-            BeginGame();
+            BeginGame(retryMode);
+        }
+        private void ShowReward()
+        {
+            if(State!=GameFlowState.Playing)return;
+            if(rewardGroup==null){enemies.ChooseReward(PickupType.Repair);return;}
+            State=GameFlowState.Reward;controls.SetGameplayInput(false);
+            repairReward.interactable=enemies.RepairUseful;
+            shieldReward.interactable=!enemies.Run.PersonalShield;
+            rewardGroup.gameObject.SetActive(true);rewardGroup.alpha=1f;
+            rewardGroup.interactable=rewardGroup.blocksRaycasts=true;
+            if(UnityEngine.EventSystems.EventSystem.current!=null)
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(repairReward.interactable?repairReward.gameObject:freezeReward.gameObject);
+        }
+        private void ChooseFreeze()=>ChooseReward(PickupType.TimeFreeze);
+        private void ChooseShield()=>ChooseReward(PickupType.PersonalShield);
+        private void ChooseRepair()=>ChooseReward(PickupType.Repair);
+        private void ChooseReward(PickupType type)
+        {
+            if(State!=GameFlowState.Reward || !enemies.ChooseReward(type))return;
+            rewardGroup.gameObject.SetActive(false);State=GameFlowState.Playing;controls.SetGameplayInput(true);
+            if(UnityEngine.EventSystems.EventSystem.current!=null)
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
         }
 
         private void HandleGameOver()
         {
             if (State != GameFlowState.Playing) return;
+            stageVictory=false;
             State = GameFlowState.GameOver;
             controls.SetGameplayInput(false);
+            StartCoroutine(ShowGameOver());
+        }
+
+        private void HandleStageClear()
+        {
+            if(State!=GameFlowState.Playing)return;
+            stageVictory=true;State=GameFlowState.GameOver;controls.SetGameplayInput(false);
             StartCoroutine(ShowGameOver());
         }
 
@@ -121,6 +175,19 @@ namespace FourCore
             // Let the final core's zoom/blink/zoom-out finish before the menu appears.
             while (controls.PresentationInputLocked) yield return null;
             EndCoreDamageFocus();
+            foreach(var label in gameOverGroup.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                if(label.name=="Title" || label.text.Trim().ToUpperInvariant()=="GAME OVER")
+                {
+                    label.text=stageVictory?"ALL STAGES CLEAR":"GAME OVER";
+                    if(stageVictory)label.color=new Color(.25f,1f,.65f);
+                }
+            if(resultScore!=null)resultScore.gameObject.SetActive(SelectedMode==GameMode.Infinite);
+            if(SelectedMode==GameMode.Infinite&&resultScore!=null&&score!=null)
+            {
+                bool record=HighScoreStore.Submit(score.Total);
+                resultScore.text=$"SCORE {score.Total}     HIGH {HighScoreStore.Best}";
+                resultScore.color=record?new Color(1f,.86f,.3f):Color.white;
+            }
             gameOverTimeScale = Time.timeScale;
             ownsGameOverPause = true;
             Time.timeScale = 0f;
@@ -138,9 +205,11 @@ namespace FourCore
 
         private void ReloadGame(bool startImmediately)
         {
-            if (State != GameFlowState.GameOver || loadingScene) return;
+            if ((State != GameFlowState.GameOver && State != GameFlowState.Playing) || loadingScene) return;
+            controls.SetGameplayInput(false);
             loadingScene = true;
             retryOnLoad = startImmediately;
+            retryMode = startImmediately ? SelectedMode : GameMode.Stage;
             gameOverGroup.interactable = gameOverGroup.blocksRaycasts = false;
             ReleaseGameOverPause();
             UnityEngine.SceneManagement.Scene scene = gameObject.scene;
@@ -180,15 +249,25 @@ namespace FourCore
             if (initialized && State == GameFlowState.Title) SetCamera(TitlePosition(), titleZoom);
         }
 
-        public void BeginGame()
+        public void BeginGame() => BeginStageMode();
+        public void BeginStageMode() => BeginGame(GameMode.Stage);
+        public void BeginInfiniteMode() => BeginGame(GameMode.Infinite);
+
+        private void BeginGame(GameMode mode)
         {
             if (!initialized || State != GameFlowState.Title) return;
+            SelectedMode = mode;
+            score?.SetEnabled(mode == GameMode.Infinite);
+            enemies.Run.ConfigureMode(mode);
             State = GameFlowState.Starting;
             Stage = IntroStage.Camera;
             // Disabling the whole menu must not flash every button's default grey tint.
             // Keep QUIT in its authored normal state; only START shows a pressed state.
             SetExitTint(quitButton, quitButton.colors.normalColor);
-            SetExitTint(startButton, startButton.colors.pressedColor);
+            UnityEngine.UI.Button selected = mode == GameMode.Infinite ? infiniteModeButton : (stageModeButton != null ? stageModeButton : startButton);
+            if(stageModeButton!=null)SetExitTint(stageModeButton, stageModeButton.colors.normalColor);
+            if(infiniteModeButton!=null)SetExitTint(infiniteModeButton, infiniteModeButton.colors.normalColor);
+            if(selected!=null)SetExitTint(selected, selected.colors.pressedColor);
             titleGroup.interactable = titleGroup.blocksRaycasts = false;
             if (UnityEngine.EventSystems.EventSystem.current != null)
                 UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
@@ -280,10 +359,17 @@ namespace FourCore
         {
             ReleaseGameOverPause();
             if (enemies != null) enemies.AllCoresDestroyed -= HandleGameOver;
+            if (enemies != null) enemies.AllStagesCleared -= HandleStageClear;
+            if(enemies!=null)enemies.RewardRequested-=ShowReward;
+            if(freezeReward!=null)freezeReward.onClick.RemoveListener(ChooseFreeze);
+            if(shieldReward!=null)shieldReward.onClick.RemoveListener(ChooseShield);
+            if(repairReward!=null)repairReward.onClick.RemoveListener(ChooseRepair);
             if (retryButton != null) retryButton.onClick.RemoveListener(Retry);
             if (menuButton != null) menuButton.onClick.RemoveListener(ReturnToMenu);
             worldFade?.Dispose();
             if (startButton != null) startButton.onClick.RemoveListener(BeginGame);
+            if (stageModeButton != null) stageModeButton.onClick.RemoveListener(BeginStageMode);
+            if (infiniteModeButton != null) infiniteModeButton.onClick.RemoveListener(BeginInfiniteMode);
             if (quitButton != null) quitButton.onClick.RemoveListener(Quit);
         }
     }

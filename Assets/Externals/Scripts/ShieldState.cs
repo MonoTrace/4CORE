@@ -4,8 +4,9 @@ namespace FourCore
 {
     public sealed class ShieldState
     {
-        private readonly HashSet<GridPosition> positions = new();
-        private readonly int capacity;
+        // Installation order makes capacity loss deterministic, including undo.
+        private readonly List<GridPosition> positions = new();
+        private int capacity;
 
         public ShieldState(int maximumCount)
         {
@@ -15,6 +16,12 @@ namespace FourCore
         public IReadOnlyCollection<GridPosition> Positions => positions;
         public int Count => positions.Count;
 
+        public void SetCapacity(int maximumCount)
+        {
+            capacity = System.Math.Max(0, maximumCount);
+            while (positions.Count > capacity) positions.RemoveAt(positions.Count - 1);
+        }
+
         public bool Contains(GridPosition position)
         {
             return positions.Contains(position);
@@ -23,12 +30,15 @@ namespace FourCore
         public void Restore(IEnumerable<GridPosition> saved)
         {
             positions.Clear();
-            foreach (GridPosition position in saved) positions.Add(position);
+            foreach (GridPosition position in saved)
+                if (!positions.Contains(position)) positions.Add(position);
         }
 
         public bool TryAdd(GridPosition position)
         {
-            return positions.Count < capacity && positions.Add(position);
+            if (positions.Count >= capacity || positions.Contains(position)) return false;
+            positions.Add(position);
+            return true;
         }
 
         public bool TryRemove(GridPosition position)

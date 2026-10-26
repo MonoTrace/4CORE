@@ -139,9 +139,9 @@ namespace FourCore.EditorTools
                 name = "Player Triangle Mesh",
                 vertices = new[]
                 {
-                    new Vector3(0f, halfHeight, 0f),
-                    new Vector3(-halfWidth, -halfHeight, 0f),
-                    new Vector3(halfWidth, -halfHeight, 0f)
+                    new Vector3(0f, halfHeight * 4f / 3f, 0f),
+                    new Vector3(-halfWidth, -halfHeight * 2f / 3f, 0f),
+                    new Vector3(halfWidth, -halfHeight * 2f / 3f, 0f)
                 },
                 triangles = new[] { 0, 2, 1 }
             };

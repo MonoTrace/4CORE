@@ -41,6 +41,7 @@ namespace FourCore.EditorTools
                 Read<ShieldView>(manager, "shieldView").Apply(shields);
                 player.Restore(new GridPosition(5, 5), FacingDirection.Up);
                 energy.Restore(4, 4);
+                score.SetEnabled(true); // This fixture explicitly verifies combat scoring.
                 score.Restore(0);
                 turns.Restore(0);
                 EnemyManager.Snapshot snapshot = manager.Capture();
@@ -77,7 +78,7 @@ namespace FourCore.EditorTools
             Reset(Shooter()); Step();
             player.Restore(firing.Offset(Vector2Int.down), FacingDirection.Up);
             Step();
-            Require(energy.Current == 3 && !Live().MissileActive, "Hostile missile player collision failed.");
+            Require(core.AliveCount == 3 && energy.Total == 3 && energy.Current == 3 && !Live().MissileActive, "Hostile missile must destroy one player-linked core.");
 
             EnemyState shooter = Shooter(); shooter.TryFire(core); shooter.ReflectMissile(barrier);
             EnemyState other = new(EnemyType.Straight, firing.Offset(Vector2Int.down), Vector2Int.left, 10);

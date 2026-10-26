@@ -24,6 +24,13 @@ namespace FourCore.EditorTools
                     GridPosition start = state.Position;
                     Require(state.WaitBeforeMoving() && state.Position.Equals(start) && !state.WaitBeforeMoving(), "Entry delay preserved");
                     bool reached = false;
+                    if (type == EnemyType.Missile)
+                    {
+                        GridPosition[] firingPath = new GridPosition[48];
+                        int count = state.PredictMissilePath(firingPath,core);
+                        Require(count > 0 && core.Occupies(firingPath[count-1]), "Missile spawn needs a living core target");
+                        continue;
+                    }
                     GridPosition[] prediction = new GridPosition[6];
                     for (int step = 0; step < 64; step++)
                     {
@@ -38,7 +45,7 @@ namespace FourCore.EditorTools
                 Require(starts.Count == 4, $"{type} must have four distinct spawn directions");
             }
             EnemyPathChecks.Run();
-            Debug.Log("[SPAWN CHECKS] All 16 type/direction combinations reach the core and match path predictions.");
+            Debug.Log("[SPAWN CHECKS] Four directions per type reach the core or a valid missile firing lane.");
         }
 
         private static void Require(bool condition, string message)

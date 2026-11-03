@@ -95,6 +95,7 @@ namespace FourCore
             enemies.RewardRequested+=ShowReward;
             if(rewardGroup!=null)
             {
+                ConfigureAugmentChoices();
                 rewardGroup.gameObject.SetActive(false);
                 freezeReward.onClick.AddListener(ChooseFreeze);
                 shieldReward.onClick.AddListener(ChooseShield);
@@ -134,19 +135,49 @@ namespace FourCore
         private void ShowReward()
         {
             if(State!=GameFlowState.Playing)return;
-            if(rewardGroup==null){enemies.ChooseReward(PickupType.Repair);return;}
+            if(rewardGroup==null)throw new System.InvalidOperationException("Assign the between-stage augment selection screen.");
             State=GameFlowState.Reward;controls.SetGameplayInput(false);
-            repairReward.interactable=enemies.RepairUseful;
-            shieldReward.interactable=!enemies.Run.PersonalShield;
+            ConfigureAugmentChoices();
+            freezeReward.interactable=shieldReward.interactable=repairReward.interactable=true;
             rewardGroup.gameObject.SetActive(true);rewardGroup.alpha=1f;
+            rewardGroup.transform.SetAsLastSibling();
             rewardGroup.interactable=rewardGroup.blocksRaycasts=true;
             if(UnityEngine.EventSystems.EventSystem.current!=null)
-                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(repairReward.interactable?repairReward.gameObject:freezeReward.gameObject);
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(shieldReward.gameObject);
         }
-        private void ChooseFreeze()=>ChooseReward(PickupType.TimeFreeze);
-        private void ChooseShield()=>ChooseReward(PickupType.PersonalShield);
-        private void ChooseRepair()=>ChooseReward(PickupType.Repair);
-        private void ChooseReward(PickupType type)
+        private void ConfigureAugmentChoices()
+        {
+            if (enemies.Run.RewardChoices.Count != 3) return;
+            UnityEngine.UI.Button[] cards = { freezeReward, shieldReward, repairReward };
+            string[] descriptions = { "FreezeDescription", "ShieldDescription", "RepairDescription" };
+            for (int i = 0; i < cards.Length; i++)
+            {
+                AugmentType type = enemies.Run.RewardChoices[i];
+                cards[i].transform.Find("Label").GetComponent<TMPro.TMP_Text>().text = AugmentCatalog.Name(type);
+                foreach (var text in cards[i].GetComponentsInChildren<TMPro.TMP_Text>(true))
+                {
+                    if (text.name == descriptions[i]) text.text = AugmentCatalog.Description(type, enemies.Run);
+                    if (text.name == "Category") { text.text = AugmentCatalog.Category(type); text.color = AugmentCatalog.Color(type); }
+                    if (text.name == "SelectionHint") text.color = AugmentCatalog.Color(type);
+                }
+                cards[i].GetComponentInChildren<AugmentCardArtwork>(true)?.Configure(type, AugmentCatalog.Color(type));
+            }
+            foreach (var text in rewardGroup.GetComponentsInChildren<TMPro.TMP_Text>(true))
+            {
+                if (text.name == "Title") text.text = $"STAGE {enemies.Run.Chapter} CLEAR";
+                if (text.name == "Prompt") text.text = enemies.Run.PrimaryAugment.HasValue
+                    ? "선택한 전투 방식을 강화할 증강 하나를 선택하세요"
+                    : "증강 하나를 선택하세요 · 효과는 이번 플레이 동안 유지됩니다";
+            }
+        }
+        private void ChooseFreeze()=>ChooseSlot(0);
+        private void ChooseShield()=>ChooseSlot(1);
+        private void ChooseRepair()=>ChooseSlot(2);
+        private void ChooseSlot(int slot)
+        {
+            if (enemies.Run.RewardChoices.Count == 3) ChooseReward(enemies.Run.RewardChoices[slot]);
+        }
+        private void ChooseReward(AugmentType type)
         {
             if(State!=GameFlowState.Reward || !enemies.ChooseReward(type))return;
             rewardGroup.gameObject.SetActive(false);State=GameFlowState.Playing;controls.SetGameplayInput(true);

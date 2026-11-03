@@ -23,9 +23,9 @@ namespace FourCore
             return true;
         }
 
-        public void SetMaximumFromCores(int aliveCores, int deployedShields = 0)
+        public void SetMaximumFromCores(int aliveCores, int deployedShields = 0, int bonusCapacity = 0)
         {
-            int maximum = Math.Max(0, aliveCores);
+            int maximum = Math.Max(0, aliveCores + bonusCapacity);
             int recovered = Math.Max(0, maximum - Total);
             int available = Math.Max(0, maximum - deployedShields);
             int current = Math.Clamp(Current + recovered, 0, available);

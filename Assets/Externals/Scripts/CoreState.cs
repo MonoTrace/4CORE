@@ -56,13 +56,13 @@ namespace FourCore
             Changed?.Invoke();
         }
 
-        public void AdvanceRecovery()
+        public void AdvanceRecovery(int amount = 1)
         {
             bool recovered = false;
             for (int i = 0; i < alive.Length; i++)
             {
                 if (recoveryTurns[i] <= 0) continue;
-                recoveryTurns[i]--;
+                recoveryTurns[i] = System.Math.Max(0, recoveryTurns[i] - System.Math.Max(1, amount));
                 if (recoveryTurns[i] == 0) { alive[i] = true; recovered = true; }
             }
             if (recovered) Changed?.Invoke();

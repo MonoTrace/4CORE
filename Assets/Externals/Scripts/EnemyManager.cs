@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FourCore
 {
-    public sealed class EnemyManager : MonoBehaviour
+    public sealed partial class EnemyManager : MonoBehaviour
     {
         private sealed class EnemyRuntime
         {
@@ -45,6 +45,8 @@ namespace FourCore
         public RunState Run { get; } = new();
         public PickupState Pickups { get; } = new();
         public BossState Boss { get; } = new();
+        public PortalState Portals { get; } = new();
+        private PortalView portalView;
         private PickupView pickupView;
         private BossView bossView;
         public event System.Action PlayerDamaged;
@@ -63,6 +65,8 @@ namespace FourCore
             internal bool GameOver;
             internal GridPosition[] Fragments;
             internal ResonanceBeam[] Beams;
+            internal AugmentCombatState Augments;
+            internal PortalState Portals;
         }
 
         public Snapshot Capture()
@@ -71,7 +75,7 @@ namespace FourCore
             for (int i = 0; i < states.Length; i++) states[i] = enemies[i].State.CopyForPrediction();
             return new Snapshot { States = states, SpawnIndex = spawnIndex, TurnsUntilSpawn = turnsUntilSpawn,
                 Run = Run.Copy(), Pickups = Pickups.Capture(), Boss = Boss.Copy(), GameOver = gameOver,
-                Fragments=pendingFragments.ToArray(),Beams=beams.ConvertAll(b=>b.Copy()).ToArray() };
+                Fragments=pendingFragments.ToArray(),Beams=beams.ConvertAll(b=>b.Copy()).ToArray(), Augments = Augments.Copy(), Portals = Portals.Copy() };
         }
 
         public void Restore(Snapshot snapshot)
@@ -94,6 +98,9 @@ namespace FourCore
             spawnIndex = snapshot.SpawnIndex;
             turnsUntilSpawn = snapshot.TurnsUntilSpawn;
             if (snapshot.Run != null) Run.Restore(snapshot.Run);
+            Augments.Restore(snapshot.Augments);
+            Portals.Restore(snapshot.Portals);
+            shieldView.ClearTransient();
             if (snapshot.Pickups != null) Pickups.Restore(snapshot.Pickups);
             if (snapshot.Boss != null) Boss.Restore(snapshot.Boss);
             gameOver = snapshot.GameOver;
@@ -106,6 +113,7 @@ namespace FourCore
                 enemies.Add(new EnemyRuntime(state, view));
             }
             RefreshPaths();
+            SynchronizeCoreEnergy();
             pickupView?.Apply(); bossView?.Apply(false);
         }
 
@@ -121,10 +129,18 @@ namespace FourCore
             if (!Pickups.TryCollect(playerState.Position, out PickupType type)) return;
             ApplyPickup(type,protectCurrentTurn);pickupView?.Apply();
         }
-        public bool ChooseReward(PickupType type)
+        public bool ChooseReward(AugmentType type)
         {
-            if(!Run.NeedsReward)return false;
-            Run.AcceptReward();ApplyPickup(type,false);return true;
+            if (!Run.AcceptReward(type)) return false;
+            if (type == AugmentType.PortalKit) Portals.Collect();
+            if (AugmentCatalog.IsPlaystyle(type))
+            {
+                shieldState.Restore(System.Array.Empty<GridPosition>());
+                Augments.Restore(null);
+                playerEnergyState.Restore(playerEnergyState.Total, playerEnergyState.Total);
+            }
+            SynchronizeCoreEnergy();
+            return true;
         }
         private void ApplyPickup(PickupType type,bool protectCurrentTurn)
         {
@@ -159,6 +175,7 @@ namespace FourCore
             turnManager = turns;
             scoreState = score;
             scorePopupPrefab = popupPrefab;
+            shieldView.BindAugments(Run, Augments, turns);
             coreState.Changed += SynchronizeCoreEnergy;
             SynchronizeCoreEnergy();
             prefabs.Clear();
@@ -194,13 +211,17 @@ namespace FourCore
                 RefreshPaths(); bossView?.Apply(); return;
             }
             // Tick existing damage before enemy attacks, so a new hit displays 90.
-            if(turnManager.LastAction==PlayerActionKind.Movement)coreState.AdvanceRecovery();
+            if(turnManager.LastAction==PlayerActionKind.Movement)coreState.AdvanceRecovery(1 + Run.BonusCoreRecovery);
             coreView.Apply(coreState);
-            playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
+            playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count, Run.BonusShieldEnergy);
+            AdvanceAugments();
+            CleanupEnemies();
             AdvanceBeams();
+            CleanupEnemies();
             StepEnemies();
             SpawnPendingFragments();
             if (Run.Phase == EncounterPhase.Boss) StepBoss();
+            CleanupEnemies();
             CollectPickup(false);
 
             if (coreState.AliveCount == 0)
@@ -239,6 +260,11 @@ namespace FourCore
             foreach (EnemyRuntime enemy in enemies)
             {
                 if (removedEnemies.Contains(enemy)) continue;
+                if (HasShield(enemy.State.Position))
+                {
+                    ResolveBodyShield(enemy, enemy.State.Position);
+                    continue;
+                }
                 if (enemy.State.Position.Equals(playerState.Position))
                 {
                     DamagePlayerAndRemove(enemy);
@@ -272,12 +298,9 @@ namespace FourCore
                     removedEnemies.Add(enemy);
                     continue;
                 }
-                if (shieldState.Contains(destination))
+                if (HasShield(destination))
                 {
-                    shieldState.TryRemove(destination);
-                    shieldView.Apply(shieldState);
-                    playerEnergyState.TryRestore(shieldState.Count);
-                    DamageEnemy(enemy, destination);
+                    ResolveBodyShield(enemy, destination);
                     continue;
                 }
 
@@ -288,7 +311,7 @@ namespace FourCore
                         turnManager.CurrentTurn,
                         $"적 충돌 | 종류={enemy.State.Type} | 적={enemy.View.name} | 이동={enemy.State.Position} -> {destination}");
                     coreView.Apply(coreState);
-                    playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
+                    playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count, Run.BonusShieldEnergy);
                     removedEnemies.Add(enemy);
                     continue;
                 }
@@ -312,13 +335,19 @@ namespace FourCore
                 TryHitEnemyWithMissile(owner, owner.State.MissilePosition);
             }
 
+            CleanupEnemies();
+        }
+
+        private void CleanupEnemies()
+        {
             foreach (EnemyRuntime enemy in removedEnemies)
             {
-                enemies.Remove(enemy);
+                if (!enemies.Remove(enemy)) continue;
                 if(enemy.State.CountsTowardStage)Run.ResolvedEnemy();
                 enemy.View.gameObject.SetActive(false);
                 Destroy(enemy.View.gameObject);
             }
+            removedEnemies.Clear();
         }
 
         private void DamagePlayerAndRemove(EnemyRuntime enemy)
@@ -351,8 +380,8 @@ namespace FourCore
 
         private void SynchronizeCoreEnergy()
         {
-            shieldState.SetCapacity(coreState.AliveCount);
-            playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
+            shieldState.SetCapacity(coreState.AliveCount + Run.BonusShieldEnergy);
+            playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count, Run.BonusShieldEnergy);
             shieldView.Apply(shieldState);
         }
 
@@ -364,7 +393,7 @@ namespace FourCore
             {pendingFragments.Add(position);pendingFragments.Add(position);}
             int coreCount = coreState.AliveCount;
             long awarded = scoreState.AddEnemyDefeat(enemy.State.BaseScore, coreCount);
-            if (Random.Range(0,100) < 33 && !coreState.Occupies(position))
+            if (Random.Range(0,100) < 33 && !coreState.Occupies(position) && !Portals.IsEndpoint(position))
             {
                 PickupType type = (PickupType)(Run.NextDrop % 3);
                 if (Pickups.TryAdd(position,type)) { Run.TakeNextDrop(); pickupView?.Apply(); }
@@ -401,10 +430,8 @@ namespace FourCore
             }
             GridPosition next = state.MissilePosition.Offset(state.MissileDirection);
             if (!GameConfig.IsInsideLogical(next)) { state.StopMissile(); return; }
-            if (shieldState.TryRemove(next))
+            if (ConsumeShield(next))
             {
-                shieldView.Apply(shieldState);
-                playerEnergyState.TryRestore(shieldState.Count);
                 state.ReflectMissile(next);
                 return;
             }
@@ -420,7 +447,7 @@ namespace FourCore
                 state.StopMissile();
                 coreState.TryDamage(next, turnManager.CurrentTurn, $"미사일 피격 | 발사 적={owner.View.name}");
                 coreView.Apply(coreState);
-                playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count);
+                playerEnergyState.SetMaximumFromCores(coreState.AliveCount, shieldState.Count, Run.BonusShieldEnergy);
                 return;
             }
             state.MoveMissile(next);
@@ -508,9 +535,8 @@ namespace FourCore
                     { missile.Active = false; DamagePlayer(); continue; }
                     GridPosition next = missile.Position.Offset(missile.Direction);
                     if (!GameConfig.IsInsideLogical(next)) { missile.Active = false; continue; }
-                    if (shieldState.TryRemove(next))
+                    if (ConsumeShield(next))
                     {
-                        shieldView.Apply(shieldState); playerEnergyState.TryRestore(shieldState.Count);
                         missile.Position = next; missile.Direction = -missile.Direction; missile.Reflected = true; continue;
                     }
                     if (missile.Reflected && Boss.TryDamage(next)) { missile.Active = false; continue; }
@@ -519,7 +545,7 @@ namespace FourCore
                     if (coreState.Occupies(next))
                     {
                         missile.Active = false; coreState.TryDamage(next,turnManager.CurrentTurn,"보스 미사일 피격");
-                        coreView.Apply(coreState); playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count); continue;
+                        coreView.Apply(coreState); playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count,Run.BonusShieldEnergy); continue;
                     }
                     missile.Position = next;
                 }
@@ -580,9 +606,8 @@ namespace FourCore
                 for(int step=0;step<GameConfig.LogicalGridSize;step++)
                 {
                     cell=cell.Offset(beam.Direction);if(!GameConfig.IsInsideLogical(cell))break;
-                    if(shieldState.TryRemove(cell))
+                    if(ConsumeShield(cell))
                     {
-                        playerEnergyState.TryRestore(shieldState.Count);shieldView.Apply(shieldState);
                         if(beam.BossCell>=0&&Boss.Active)Boss.TryDamage(Boss.Cell(beam.BossCell));
                         Run.Announce("RESONANCE BLOCKED");break;
                     }
@@ -590,7 +615,7 @@ namespace FourCore
                     if(coreState.Occupies(cell))
                     {
                         coreState.TryDamage(cell,turnManager.CurrentTurn,"Resonance beam");coreView.Apply(coreState);
-                        playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count);break;
+                        playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count,Run.BonusShieldEnergy);break;
                     }
                 }
                 beams.RemoveAt(i);
@@ -642,9 +667,9 @@ namespace FourCore
             {
                 if(Boss.Health(i)<=0)continue;
                 GridPosition cell=Boss.CellAt(next,i);
-                if(shieldState.TryRemove(cell))
+                if(ConsumeShield(cell))
                 {
-                    Boss.TryDamage(Boss.Cell(i));playerEnergyState.TryRestore(shieldState.Count);blocked=true;
+                    Boss.TryDamage(Boss.Cell(i));blocked=true;
                 }
                 if(cell.Equals(playerState.Position)){DamagePlayer();blocked=true;}
                 if(coreState.Occupies(cell)||!GameConfig.IsInsidePlayable(cell))nearCore=true;
@@ -674,7 +699,7 @@ namespace FourCore
             }
             Boss.Finish();beams.Clear();Run.CompleteBoss();turnsUntilSpawn=4;
             coreState.TryRecoverOne();coreView.Apply(coreState);
-            playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count);
+            playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count,Run.BonusShieldEnergy);
         }
 
         private void OnDestroy()

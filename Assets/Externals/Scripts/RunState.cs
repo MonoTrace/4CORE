@@ -4,6 +4,7 @@ using UnityEngine;
 namespace FourCore
 {
     public enum PickupType { TimeFreeze, PersonalShield, Repair }
+    public enum AugmentType { ShieldEnergy = 0, CoreRecovery = 1, LongerFreeze = 2, ChainBarrier = 6, TimedBarrier = 7, PortalKit = 8 }
     public enum EncounterPhase { Normal, Boss }
     public enum GameMode { Stage, Infinite }
 
@@ -19,6 +20,13 @@ namespace FourCore
         public int NextDrop { get; private set; }
         public bool NeedsReward { get; private set; }
         public bool Completed { get; private set; }
+        public int BonusShieldEnergy { get; private set; }
+        public int BonusCoreRecovery { get; private set; }
+        public int BonusFreezeMoves { get; private set; }
+        public AugmentType? PrimaryAugment { get; private set; }
+        private AugmentType[] rewardChoices = Array.Empty<AugmentType>();
+        public System.Collections.Generic.IReadOnlyList<AugmentType> RewardChoices => rewardChoices;
+        public bool Has(AugmentType type) => PrimaryAugment == type;
         public string StageLabel => IsInfinite ? "INFINITE" : $"STAGE {Chapter} - {StageCatalog.Name(Chapter)}";
         private bool freezeJustActivated;
         public EncounterPhase Phase { get; private set; }
@@ -37,7 +45,9 @@ namespace FourCore
         });
 
         public RunState Copy() => new() { Mode = Mode, Chapter = Chapter, Spawned = Spawned, Resolved = Resolved,
-            FreezeMoves = FreezeMoves, PersonalShield = PersonalShield, NextDrop = NextDrop, Phase = Phase, freezeJustActivated = freezeJustActivated,NeedsReward=NeedsReward,Completed=Completed };
+            FreezeMoves = FreezeMoves, PersonalShield = PersonalShield, NextDrop = NextDrop, Phase = Phase, freezeJustActivated = freezeJustActivated,NeedsReward=NeedsReward,Completed=Completed,
+            BonusShieldEnergy = BonusShieldEnergy, BonusCoreRecovery = BonusCoreRecovery, BonusFreezeMoves = BonusFreezeMoves,
+            PrimaryAugment = PrimaryAugment, rewardChoices = (AugmentType[])rewardChoices.Clone() };
         public void Restore(RunState saved)
         {
             Mode = saved.Mode; Chapter = saved.Chapter; Spawned = saved.Spawned; Resolved = saved.Resolved;
@@ -46,6 +56,11 @@ namespace FourCore
             freezeJustActivated = saved.freezeJustActivated;
             NeedsReward=saved.NeedsReward;
             Completed=saved.Completed;
+            BonusShieldEnergy = saved.BonusShieldEnergy;
+            BonusCoreRecovery = saved.BonusCoreRecovery;
+            BonusFreezeMoves = saved.BonusFreezeMoves;
+            PrimaryAugment = saved.PrimaryAugment;
+            rewardChoices = (AugmentType[])saved.rewardChoices.Clone();
             Changed?.Invoke();
         }
         public void SpawnedEnemy() { Spawned++; Changed?.Invoke(); }
@@ -53,23 +68,39 @@ namespace FourCore
         public void BeginBoss() { Phase = EncounterPhase.Boss; Notice?.Invoke("WARNING"); Changed?.Invoke(); }
         public void CompleteBoss()
         {
-            if(IsInfinite || Completed)return;
+            if(IsInfinite || Completed || NeedsReward)return;
             Completed=Chapter>=StageCatalog.Count;
-            if(!Completed)Chapter++;
             Spawned = Resolved = 0; Phase = EncounterPhase.Normal;
-            NeedsReward=false;
-            Notice?.Invoke(Completed?"ALL STAGES CLEAR":StageLabel); Changed?.Invoke();
+            NeedsReward=!Completed;
+            rewardChoices = Completed ? Array.Empty<AugmentType>() : AugmentCatalog.Offer(PrimaryAugment.HasValue);
+            if (Completed) Notice?.Invoke("ALL STAGES CLEAR");
+            Changed?.Invoke();
         }
         public PickupType TakeNextDrop()
         {
             PickupType result = (PickupType)(NextDrop % 3); NextDrop++; return result;
         }
-        public void AcceptReward(){NeedsReward=false;Changed?.Invoke();}
+        public bool AcceptReward(AugmentType type)
+        {
+            if (!NeedsReward || Array.IndexOf(rewardChoices, type) < 0) return false;
+            switch (type)
+            {
+                case AugmentType.ShieldEnergy: BonusShieldEnergy++; break;
+                case AugmentType.CoreRecovery: BonusCoreRecovery++; break;
+                case AugmentType.LongerFreeze: BonusFreezeMoves += 2; break;
+                case AugmentType.PortalKit: break;
+                default: PrimaryAugment = type; break;
+            }
+            NeedsReward = false;
+            Chapter++;
+            Notice?.Invoke(StageLabel);
+            Changed?.Invoke();
+            return true;
+        }
         public void Activate(PickupType type,bool protectCurrentTurn=true)
         {
-            if (type == PickupType.TimeFreeze) { FreezeMoves = Math.Max(FreezeMoves, 10); freezeJustActivated = protectCurrentTurn; }
+            if (type == PickupType.TimeFreeze) { FreezeMoves = Math.Max(FreezeMoves, 10 + BonusFreezeMoves); freezeJustActivated = protectCurrentTurn; }
             if (type == PickupType.PersonalShield) PersonalShield = true;
-            Notice?.Invoke(type switch { PickupType.TimeFreeze => "TIME FREEZE", PickupType.PersonalShield => "SHIELD READY", _ => "CORE RESTORED" });
             Changed?.Invoke();
         }
         public bool AbsorbHit()

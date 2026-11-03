@@ -44,6 +44,22 @@ namespace FourCore.EditorTools
             GameObject prefab=PrefabUtility.SaveAsPrefabAsset(obj,path); UnityEngine.Object.DestroyImmediate(obj);
             return prefab.GetComponent<SpriteRenderer>();
         }
+        public static void UpdatePickupPrefabs()
+        {
+            if(EditorApplication.isPlaying)throw new InvalidOperationException("Stop Play mode first.");
+            SpriteRenderer[] prefabs = { BuildPickup(PickupType.TimeFreeze), BuildPickup(PickupType.PersonalShield), BuildPickup(PickupType.Repair) };
+            string path=Prefabs+"PickupView.prefab";
+            GameObject root=PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                var config=new SerializedObject(root.GetComponent<PickupView>());var array=config.FindProperty("pickupPrefabs");
+                array.arraySize=prefabs.Length;
+                for(int i=0;i<prefabs.Length;i++)array.GetArrayElementAtIndex(i).objectReferenceValue=prefabs[i];
+                config.ApplyModifiedPropertiesWithoutUndo();PrefabUtility.SaveAsPrefabAsset(root,path);
+            }
+            finally{PrefabUtility.UnloadPrefabContents(root);}
+            AssetDatabase.SaveAssets();
+        }
         private static TMP_Text WorldText(Transform parent,string name)
         {
             GameObject obj=new(name); obj.transform.SetParent(parent,false);
@@ -86,6 +102,7 @@ namespace FourCore.EditorTools
                 array.arraySize=3;for(int i=0;i<3;i++)array.GetArrayElementAtIndex(i).objectReferenceValue=pickupPrefabs[i];
                 config.ApplyModifiedPropertiesWithoutUndo(); pickupRoot=PrefabUtility.SaveAsPrefabAsset(temporary,pickupPath); UnityEngine.Object.DestroyImmediate(temporary);
             }
+            UpdatePickupPrefabs();
             string bossPath=Prefabs+"FirstBoss.prefab";
             GameObject bossRoot=AssetDatabase.LoadAssetAtPath<GameObject>(bossPath);
             if(bossRoot==null)

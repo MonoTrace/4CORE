@@ -61,16 +61,17 @@ namespace FourCore.EditorTools
             if(flowConfig.FindProperty("rewardGroup").objectReferenceValue==null)
             {
                 GameObject reward=CanvasRoot("RewardScreen",290);
-                Label(reward.transform,"Title","전투 종료",58,0,270,1000,90,font).fontStyle=FontStyles.Bold;
-                Label(reward.transform,"Prompt","다음 전투에 가져갈 보상 하나를 선택하세요",28,0,175,1200,65,font);
-                UnityEngine.UI.Button freeze=Button(reward.transform,"FreezeReward","시간정지",-470,15,font);
-                UnityEngine.UI.Button shield=Button(reward.transform,"ShieldReward","보호막",0,15,font);
-                UnityEngine.UI.Button repair=Button(reward.transform,"RepairReward","코어 회복",470,15,font);
-                Label(reward.transform,"FreezeDescription","다음 10번 이동 동안\n적과 코어 회복 시간 정지",25,-470,-90,410,95,font);
-                Label(reward.transform,"ShieldDescription","다음 피격 1회 방어\n중첩되지 않음",25,0,-90,410,95,font);
-                Label(reward.transform,"RepairDescription","손상된 코어 하나 복구\n사용 가능한 에너지 회복",25,470,-90,410,95,font);
+                Label(reward.transform,"Title","STAGE CLEAR",58,0,270,1000,90,font).fontStyle=FontStyles.Bold;
+                Label(reward.transform,"Prompt","증강 하나를 선택하세요 · 이번 플레이 동안 효과가 누적됩니다",28,0,175,1400,65,font);
+                UnityEngine.UI.Button freeze=Button(reward.transform,"FreezeReward","시간 정지 +2턴",-470,15,font);
+                UnityEngine.UI.Button shield=Button(reward.transform,"ShieldReward","쉴드 에너지 +1",0,15,font);
+                UnityEngine.UI.Button repair=Button(reward.transform,"RepairReward","코어 회복 속도 +1",470,15,font);
+                Label(reward.transform,"FreezeDescription","시간 정지 지속 시간 증가\n10턴 → 12턴",25,-470,-90,410,95,font);
+                Label(reward.transform,"ShieldDescription","에너지·쉴드 설치 한도 +1\n누적 추가 에너지 +0 → +1",25,0,-90,410,95,font);
+                Label(reward.transform,"RepairDescription","이동할 때마다 코어 회복량 +1\n회복량 1 → 2",25,470,-90,410,95,font);
                 Assign(flow,"rewardGroup",reward.GetComponent<CanvasGroup>());Assign(flow,"freezeReward",freeze);Assign(flow,"shieldReward",shield);Assign(flow,"repairReward",repair);reward.SetActive(false);
             }
+            AugmentCardSetup.Apply(flow);
             AssetDatabase.SaveAssets();EditorSceneManager.MarkSceneDirty(boot.gameObject.scene);EditorSceneManager.SaveScene(boot.gameObject.scene);
         }
     }

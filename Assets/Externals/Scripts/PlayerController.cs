@@ -89,6 +89,9 @@ namespace FourCore
 
             if (PresentationInputLocked) return;
 
+            if (keyboard.eKey.wasPressedThisFrame)
+            { TryDropPortal(); ResetHeldInput(); return; }
+
             if (keyboard.xKey.wasPressedThisFrame)
             { TryWait(); ResetHeldInput(); return; }
 
@@ -158,6 +161,7 @@ namespace FourCore
             }
 
             undoHistory?.RecordBeforeMove();
+            if (encounter != null) destination = encounter.ResolvePortalEntry(destination);
             playerState.MoveTo(destination, movement);
             playerView.Apply(playerState);
             encounter?.CollectPickup();
@@ -183,6 +187,7 @@ namespace FourCore
             }
 
             GridPosition position = playerState.Position;
+            if (encounter != null && !encounter.CanPlaceShield(position)) return false;
             bool changed;
             if (shieldState.Contains(position))
             {
@@ -190,6 +195,7 @@ namespace FourCore
                 if (changed)
                 {
                     playerEnergyState.TryRestore(shieldState.Count);
+                    encounter?.ShieldRecalled(position);
                 }
             }
             else
@@ -205,6 +211,7 @@ namespace FourCore
                 {
                     playerEnergyState.TryRestore(shieldState.Count);
                 }
+                else encounter?.ShieldPlaced(position);
             }
 
             if (!changed)
@@ -214,6 +221,16 @@ namespace FourCore
 
             shieldView.Apply(shieldState);
             ActionTaken?.Invoke();
+            return true;
+        }
+
+        public bool TryDropPortal()
+        {
+            if (!GameplayInputEnabled || PresentationInputLocked || encounter == null ||
+                !encounter.CanDropPortal(playerState.Position)) return false;
+            undoHistory?.RecordBeforeMove();
+            if (!encounter.DropPortal(playerState.Position)) return false;
+            turnManager.CompletePlayerAction(PlayerActionKind.Wait); ActionTaken?.Invoke(); ResetHeldInput();
             return true;
         }
     }

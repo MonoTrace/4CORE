@@ -92,6 +92,7 @@ namespace FourCore
             enemyManager.ConfigureFeatures(pickups,boss);
             if(ambientPrefab!=null)Instantiate(ambientPrefab,transform,false).Initialize(enemyManager);
             playerController.SetEncounter(enemyManager);
+            enemyManager.ConfigurePortals(playerController);
             if (runPresentation != null) runPresentation.Initialize(enemyManager,playerController,playerView);
 
             scoreHud.Initialize(scoreState);

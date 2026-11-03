@@ -63,7 +63,7 @@ namespace FourCore
             player.Restore(saved.Position, saved.Facing);
             core.Restore(saved.Core);
             shields.Restore(saved.Shields);
-            shields.SetCapacity(core.AliveCount);
+            shields.SetCapacity(saved.MaximumEnergy);
             energy.Restore(saved.Energy, saved.MaximumEnergy);
             score.Restore(saved.Score);
             turns.Restore(saved.Turn);

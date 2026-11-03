@@ -66,12 +66,12 @@ namespace FourCore.EditorTools
                 }
                 shieldView.Apply(shields);Step();
             }
-            Require(!boss.Active && manager.Run.Chapter==2 && score.Total==800,"boss destruction and core multiplier");
-            Require(!manager.Run.NeedsReward && controls.GameplayInputEnabled,"next stage without consumable reward");
+            Require(!boss.Active && manager.Run.Chapter==1 && manager.Run.NeedsReward && score.Total==800,"boss destruction waits for augment");StageThemeChecks.AcceptAugment(AugmentType.ShieldEnergy);
+            Require(!manager.Run.NeedsReward && controls.GameplayInputEnabled,"next stage after augment selection");
             Require(core.AliveCount==4,"shield stops straight boss before cores");
             EnemyManager.Snapshot chapter2=manager.Capture();manager.Run.CompleteBoss();manager.Restore(chapter2);
             Require(manager.Run.Chapter==2,"chapter snapshot");
-            manager.Run.CompleteBoss();Require(manager.Run.Chapter==3&&!manager.Run.IsInfinite&&manager.Run.CanSpawn,"third stage stays in stage mode");
+            manager.Run.CompleteBoss();StageThemeChecks.AcceptAugment(AugmentType.LongerFreeze);Require(manager.Run.Chapter==3&&!manager.Run.IsInfinite&&manager.Run.CanSpawn,"third stage stays in stage mode");
             manager.Run.ConfigureMode(GameMode.Infinite);Require(manager.Run.IsInfinite&&manager.Run.CanSpawn&&!manager.Run.BossReady,"separate infinite mode");
 
             BossState sparse=new();sparse.Begin(0,3);
@@ -91,7 +91,7 @@ namespace FourCore.EditorTools
             core.Restore(new int[4]);coreView.Apply(core,false);shields.Restore(Array.Empty<GridPosition>());
             player.Restore(new GridPosition(8,8),FacingDirection.Up);
             EnemyManager.Snapshot snap=manager.Capture();Set(snap,"States",Array.Empty<EnemyState>());Set(snap,"Run",new RunState());Set(snap,"TurnsUntilSpawn",1000);manager.Restore(snap);
-            manager.Run.CompleteBoss();manager.Run.AcceptReward();manager.Run.BeginBoss();manager.Boss.Begin(0,2);
+            manager.Run.CompleteBoss();StageThemeChecks.SkipBossReward(manager.Run);manager.Run.BeginBoss();manager.Boss.Begin(0,2);
             BossState boss=manager.Boss;
             Require(boss.IsCross&&boss.CellCount==5,"five-cell cross boss");
             for(int i=0;i<5;i++)Require(boss.Health(i)==3,"cross boss HP3");
@@ -120,7 +120,7 @@ namespace FourCore.EditorTools
                 while(boss.HasMissiles&&deadline-->0)turns.CompletePlayerAction();
                 Require(deadline>0,"cross missiles resolve");
             }
-            Require(!boss.Active&&manager.Run.Chapter==3&&!manager.Run.IsInfinite&&!manager.Run.NeedsReward,"phase boss advances to refraction stage");
+            Require(!boss.Active&&manager.Run.NeedsReward,"phase boss waits for augment");StageThemeChecks.AcceptAugment(AugmentType.ShieldEnergy);Require(manager.Run.Chapter==3&&!manager.Run.IsInfinite&&!manager.Run.NeedsReward,"phase boss advances to refraction stage");
             return "PASS: cross shape, five HP3 cells, diagonal volley, shield stops charge, reflected player safety, snapshots, full defeat and stage3 progression";
         }
 

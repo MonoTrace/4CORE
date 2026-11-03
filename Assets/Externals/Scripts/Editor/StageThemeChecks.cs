@@ -11,6 +11,94 @@ namespace FourCore.EditorTools
         private static T Read<T>(object obj,string name)=>(T)obj.GetType().GetField(name,Fields).GetValue(obj);
         private static void Set(object obj,string name,object value)=>obj.GetType().GetField(name,Fields).SetValue(obj,value);
         private static void Need(bool value,string label){if(!value)throw new Exception("STAGE CHECK: "+label);}
+        // Deterministic legacy passive fixtures; gameplay offer randomness is tested separately.
+        public static void SkipBossReward(RunState run)
+        {
+            if (!run.NeedsReward) return;
+            Set(run, "rewardChoices", new[] { AugmentType.ShieldEnergy, AugmentType.CoreRecovery, AugmentType.LongerFreeze });
+            run.AcceptReward(AugmentType.LongerFreeze);
+        }
+        public static void AcceptAugment(AugmentType type)
+        {
+            var manager = UnityEngine.Object.FindAnyObjectByType<EnemyManager>();
+            var flow = UnityEngine.Object.FindAnyObjectByType<GameFlowController>();
+            Set(manager.Run, "rewardChoices", new[] { type, AugmentType.CoreRecovery, AugmentType.LongerFreeze });
+            if (flow.State == GameFlowState.Reward)
+            {
+                typeof(GameFlowController).GetMethod("ConfigureAugmentChoices", Fields).Invoke(flow,null);
+                Read<UnityEngine.UI.Button>(flow,"freezeReward").onClick.Invoke();
+            }
+            else Need(manager.ChooseReward(type), "augment accepted");
+        }
+        public static string Augments()
+        {
+            // Each passive stacks, survives snapshots, and resets for a new run.
+            foreach (AugmentType type in new[] { AugmentType.ShieldEnergy, AugmentType.CoreRecovery, AugmentType.LongerFreeze })
+            {
+                RunState run = new();
+                Need(!run.AcceptReward(type), "cannot choose before a boss clear");
+                for (int stage = 1; stage <= 2; stage++)
+                {
+                    run.BeginBoss(); run.CompleteBoss(); if(run.NeedsReward)Set(run,"rewardChoices",new[] { AugmentType.ShieldEnergy, AugmentType.CoreRecovery, AugmentType.LongerFreeze });
+                    Need(run.Chapter == stage && run.NeedsReward && !run.CanSpawn, "selection gates next stage");
+                    run.CompleteBoss();
+                    Need(run.Chapter == stage, "duplicate completion cannot skip a stage");
+                    Need(run.AcceptReward(type) && !run.AcceptReward(type), "exactly one augment per clear");
+                }
+                RunState copy = run.Copy();
+                run.ConfigureMode(GameMode.Infinite); run.Restore(copy);
+                Need(run.Chapter == 3 && run.BonusShieldEnergy == (type == AugmentType.ShieldEnergy ? 2 : 0)
+                    && run.BonusCoreRecovery == (type == AugmentType.CoreRecovery ? 2 : 0)
+                    && run.BonusFreezeMoves == (type == AugmentType.LongerFreeze ? 4 : 0), "stacked passives restored");
+                run.Activate(PickupType.TimeFreeze, false);
+                Need(run.FreezeMoves == 10 + run.BonusFreezeMoves, "freeze pickup uses upgraded duration");
+                CoreState core = new(); core.TryDamage(core.GetCell(0), 0, "Augment check");
+                core.AdvanceRecovery(1 + run.BonusCoreRecovery);
+                Need(core.GetRecoveryTurns(0) == 89 - run.BonusCoreRecovery, "core recovery bonus applies");
+                run.BeginBoss(); run.CompleteBoss(); if(run.NeedsReward)Set(run,"rewardChoices",new[] { AugmentType.ShieldEnergy, AugmentType.CoreRecovery, AugmentType.LongerFreeze });
+                Need(run.Completed && !run.NeedsReward && !run.CanSpawn, "final boss ends without another selection");
+                run.ConfigureMode(GameMode.Stage);
+                Need(run.BonusShieldEnergy == 0 && run.BonusCoreRecovery == 0 && run.BonusFreezeMoves == 0, "new run resets upgrades");
+            }
+
+            var manager = UnityEngine.Object.FindAnyObjectByType<EnemyManager>();
+            var controls = UnityEngine.Object.FindAnyObjectByType<PlayerController>();
+            var flow = UnityEngine.Object.FindAnyObjectByType<GameFlowController>();
+            var energy = Read<PlayerEnergyState>(manager, "playerEnergyState");
+            var shields = Read<ShieldState>(manager, "shieldState");
+            var cores = Read<CoreState>(manager, "coreState");
+            ShowBoss(1);
+            for (int i = 0; i < manager.Boss.CellCount; i++)
+                while (manager.Boss.Health(i) > 0) manager.Boss.TryDamage(manager.Boss.Cell(i));
+            Step();
+            Need(flow.State == GameFlowState.Reward && manager.Run.Chapter == 1 && manager.Run.NeedsReward, "actual boss opens selection");
+            Need(!controls.TryMove(Vector2Int.right) && !controls.TryWait() && !controls.TryToggleShield(), "gameplay blocked during choice");
+            int count = manager.ActiveEnemyCount;
+            Step(); Step();
+            Need(manager.ActiveEnemyCount == count && !manager.Run.CanSpawn, "no spawns during choice");
+            Need(Read<CanvasGroup>(flow, "rewardGroup").gameObject.activeInHierarchy, "choice screen visible");
+            Need(Read<UnityEngine.UI.Button>(flow, "freezeReward").interactable
+                && Read<UnityEngine.UI.Button>(flow, "shieldReward").interactable
+                && Read<UnityEngine.UI.Button>(flow, "repairReward").interactable, "all three options selectable");
+            AcceptAugment(AugmentType.ShieldEnergy);
+            Need(flow.State == GameFlowState.Playing && controls.GameplayInputEnabled && manager.Run.Chapter == 2
+                && energy.Total == 5 && energy.Current == 5, "energy augment grants a usable slot and resumes play");
+            for (int i = 0; i < 5; i++)
+                Need(shields.TryAdd(new GridPosition(5 + i, 5)) && energy.TrySpend(), "five shields can be deployed");
+            Need(!shields.TryAdd(new GridPosition(10, 5)), "capacity still enforced");
+            Need(controls.TryMove(Vector2Int.right), "record undo with five deployed shields");
+            cores.TryDamage(cores.GetCell(0), 0, "Augmented energy check");
+            Need(energy.Total == 4 && shields.Count == 4, "core loss retains one bonus slot");
+            Need(controls.TryUndo() && cores.AliveCount == 4 && energy.Total == 5 && shields.Count == 5
+                && manager.Run.BonusShieldEnergy == 1, "undo restores all five shields and bonus capacity");
+            shields.Restore(Array.Empty<GridPosition>()); energy.Restore(5, 5);
+            manager.Run.BeginBoss(); manager.Boss.Begin(0, 2);
+            for (int i = 0; i < manager.Boss.CellCount; i++)
+                while (manager.Boss.Health(i) > 0) manager.Boss.TryDamage(manager.Boss.Cell(i));
+            Step(); AcceptAugment(AugmentType.ShieldEnergy);
+            Need(manager.Run.Chapter == 3 && manager.Run.BonusShieldEnergy == 2 && energy.Total == 6, "same augment stacks across bosses");
+            return "PASS: three passives, stacking/snapshots/reset, real boss selection, input/spawn gate, five shields, core-loss/undo capacity, next-stage resume";
+        }
         private static void CheckEnemy(int stage,int index,EnemyType type,EnemyTraits traits)
         {
             EnemyType expected=stage==1?EnemyType.Straight:stage==2?
@@ -42,7 +130,7 @@ namespace FourCore.EditorTools
                     Need(next.X==boss.Origin.X&&next.Y==boss.Origin.Y-1,"cardinal core-directed step");
                 }
                 else Need(boss.HasMissiles,"projectile boss attacks");
-                run.BeginBoss();run.CompleteBoss();
+                run.BeginBoss();run.CompleteBoss();SkipBossReward(run);
             }
             Need(run.Completed&&!run.CanSpawn&&!run.IsInfinite&&run.Chapter==3,"third stage is final");
             BossState artillery=new();artillery.Begin(0,3);
@@ -68,7 +156,7 @@ namespace FourCore.EditorTools
             EnemyManager.Snapshot empty=manager.Capture();Set(empty,"States",Array.Empty<EnemyState>());Set(empty,"Beams",Array.Empty<ResonanceBeam>());
             Set(empty,"Fragments",Array.Empty<GridPosition>());Set(empty,"Boss",new BossState());Set(empty,"Run",new RunState());Set(empty,"GameOver",false);
             manager.Restore(empty);
-            for(int i=1;i<stage;i++)manager.Run.CompleteBoss();
+            for(int i=1;i<stage;i++){manager.Run.CompleteBoss();SkipBossReward(manager.Run);}
             manager.Run.BeginBoss();manager.Boss.Begin(0,stage);
             Read<BossView>(manager,"bossView").Apply(false);
             Read<PlayerState>(manager,"playerState").Restore(new GridPosition(4,4),FacingDirection.Up);
@@ -86,7 +174,7 @@ namespace FourCore.EditorTools
             {
                 ShowBoss(stage);manager.Boss.Finish();
                 var seed=manager.Capture();Set(seed,"Run",new RunState());manager.Restore(seed);
-                for(int s=1;s<stage;s++)manager.Run.CompleteBoss();
+                for(int s=1;s<stage;s++){manager.Run.CompleteBoss();SkipBossReward(manager.Run);}
                 for(int index=0;index<30;index++)
                 {
                     typeof(EnemyManager).GetMethod("SpawnNextEnemy",Fields).Invoke(manager,null);
@@ -142,7 +230,7 @@ namespace FourCore.EditorTools
                     view.Apply(shields);Step();Need(core.AliveCount>0,"core survives counter combat");
                 }
                 Need(!manager.Boss.Active,"boss can be defeated: "+stage);
-                if(stage<3)Need(manager.Run.Chapter==stage+1&&!manager.Run.NeedsReward,"stage advances");
+                if(stage<3){Need(manager.Run.Chapter==stage&&manager.Run.NeedsReward,"boss waits for augment");AcceptAugment(AugmentType.ShieldEnergy);Need(manager.Run.Chapter==stage+1&&!manager.Run.NeedsReward,"stage advances after selection");}
                 else Need(manager.Run.Completed&&!manager.Run.CanSpawn,"third boss ends run");
             }
             return "PASS: all three bosses defeated using shields/reflection; third boss ends stage mode";

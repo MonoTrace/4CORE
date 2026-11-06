@@ -1,0 +1,7 @@
+{
+  "name": "RemoteBotEditSmoke",
+  "references": [],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}

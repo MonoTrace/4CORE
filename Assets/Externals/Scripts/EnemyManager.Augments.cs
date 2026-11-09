@@ -31,7 +31,8 @@ namespace FourCore
                     foreach (GridPosition other in shieldState.Positions)
                         if (!linked.Contains(other) && Mathf.Abs(other.X-linked[i].X)+Mathf.Abs(other.Y-linked[i].Y)==1) linked.Add(other);
             }
-            foreach (GridPosition cell in linked) RemoveShield(cell);
+            foreach (GridPosition cell in linked)
+                if (RemoveShield(cell)) shieldView.ShowBreak(cell);
             if (Run.Has(AugmentType.ChainBarrier)) Explode(linked);
             shieldView.Apply(shieldState);
             return true;

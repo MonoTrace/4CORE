@@ -38,6 +38,11 @@ namespace FourCore
         private int turnsUntilSpawn;
         private bool spawningStarted;
         private bool gameOver;
+        private ParticleSystem deathParticles;
+        private Material deathParticleMaterial;
+        private AudioSource deathAudioSource;
+        private AudioClip deathAudioClip;
+        private int lastDeathSoundFrame = -1;
         public event System.Action AllCoresDestroyed;
         public event System.Action AllStagesCleared;
 
@@ -50,7 +55,9 @@ namespace FourCore
         private PickupView pickupView;
         private BossView bossView;
         public event System.Action PlayerDamaged;
+        public event System.Action<PickupType> PickupCollected;
         public event System.Action RewardRequested;
+        public Vector3 LastDeathWorldPosition { get; private set; }
         public bool BossOccupies(GridPosition position) => Boss.Occupies(position);
         public bool RepairUseful=>coreState.AliveCount<4||playerEnergyState.Current<Mathf.Max(0,playerEnergyState.Total-shieldState.Count);
 
@@ -67,6 +74,7 @@ namespace FourCore
             internal ResonanceBeam[] Beams;
             internal AugmentCombatState Augments;
             internal PortalState Portals;
+            internal Vector3 LastDeathPosition;
         }
 
         public Snapshot Capture()
@@ -75,11 +83,14 @@ namespace FourCore
             for (int i = 0; i < states.Length; i++) states[i] = enemies[i].State.CopyForPrediction();
             return new Snapshot { States = states, SpawnIndex = spawnIndex, TurnsUntilSpawn = turnsUntilSpawn,
                 Run = Run.Copy(), Pickups = Pickups.Capture(), Boss = Boss.Copy(), GameOver = gameOver,
-                Fragments=pendingFragments.ToArray(),Beams=beams.ConvertAll(b=>b.Copy()).ToArray(), Augments = Augments.Copy(), Portals = Portals.Copy() };
+                Fragments=pendingFragments.ToArray(),Beams=beams.ConvertAll(b=>b.Copy()).ToArray(), Augments = Augments.Copy(), Portals = Portals.Copy(), LastDeathPosition = LastDeathWorldPosition };
         }
 
         public void Restore(Snapshot snapshot)
         {
+            LastDeathWorldPosition = snapshot.LastDeathPosition;
+            if (deathParticles != null) deathParticles.Clear();
+            if (deathAudioSource != null) deathAudioSource.Stop();
             foreach (EnemyRuntime enemy in enemies)
             {
                 enemy.View.gameObject.SetActive(false);
@@ -151,6 +162,7 @@ namespace FourCore
                 coreView.Apply(coreState);
             }
             Run.Activate(type,protectCurrentTurn);
+            PickupCollected?.Invoke(type);
         }
 
         public void Initialize(
@@ -343,6 +355,11 @@ namespace FourCore
             foreach (EnemyRuntime enemy in removedEnemies)
             {
                 if (!enemies.Remove(enemy)) continue;
+                if (GameConfig.IsInsideLogical(enemy.State.Position))
+                {
+                    ShowDeathParticles(enemy.State.Position, enemy.State.IsFragment ? 10 : 20);
+                    PlayDeathSound();
+                }
                 if(enemy.State.CountsTowardStage)Run.ResolvedEnemy();
                 enemy.View.gameObject.SetActive(false);
                 Destroy(enemy.View.gameObject);
@@ -388,6 +405,7 @@ namespace FourCore
         private void DamageEnemy(EnemyRuntime enemy, GridPosition position)
         {
             if (removedEnemies.Contains(enemy) || !enemy.State.TakeDamage()) return;
+            LastDeathWorldPosition = transform.TransformPoint(GameConfig.LogicalToWorld(position));
             removedEnemies.Add(enemy);
             if((enemy.State.Traits&EnemyTraits.Split)!=0)
             {pendingFragments.Add(position);pendingFragments.Add(position);}
@@ -561,7 +579,7 @@ namespace FourCore
             }
             else if (!Boss.ConsumeRest())
             {
-                if(Boss.UsesStraightCharge)
+                if(Boss.UsesCharge)
                 {AdvanceBossCharge();bossView?.Apply();return;}
                 Boss.Fire(coreState);
                 if(Boss.UsesResonance && Boss.HasMissiles)
@@ -678,7 +696,7 @@ namespace FourCore
             if(blocked){Run.Announce("CHARGE BLOCKED");Boss.Teleport(ChooseBossSite());}
             else if(nearCore||Boss.PatternStep>=6)
             {
-                if (Boss.UsesStraightCharge && nearCore)
+                if (Boss.UsesCharge && nearCore)
                     for (int i=0;i<Boss.CellCount;i++)
                         if(Boss.Health(i)>0)
                             coreState.TryDamage(Boss.CellAt(next,i),turnManager.CurrentTurn,"직선 돌진 보스 충돌");
@@ -691,6 +709,9 @@ namespace FourCore
 
         private void FinishBoss()
         {
+            LastDeathWorldPosition = transform.TransformPoint(GameConfig.LogicalToWorld(Boss.LastDestroyedCell));
+            PlayDeathSound();
+            for (int i = 0; i < Boss.CellCount; i++) ShowDeathParticles(Boss.Cell(i), 24);
             int count=coreState.AliveCount;long awarded=scoreState.AddEnemyDefeat(200,count);
             if(awarded>0&&scorePopupPrefab!=null)
             {
@@ -702,8 +723,87 @@ namespace FourCore
             playerEnergyState.SetMaximumFromCores(coreState.AliveCount,shieldState.Count,Run.BonusShieldEnergy);
         }
 
+        private void PlayDeathSound()
+        {
+            // A simultaneous group defeat shares one burst to avoid a loud stack of identical clips.
+            if (lastDeathSoundFrame == Time.frameCount) return;
+            if (deathAudioSource == null)
+            {
+                deathAudioSource = gameObject.AddComponent<AudioSource>();
+                deathAudioSource.playOnAwake = false;
+                deathAudioSource.spatialBlend = 0f;
+                deathAudioSource.volume = .16f;
+                const int sampleRate = 22050;
+                const float duration = .18f;
+                float[] samples = new float[(int)(sampleRate * duration)];
+                System.Random noise = new(413);
+                float phase = 0f;
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    float t = i / (float)sampleRate;
+                    float envelope = Mathf.Min(1f, t / .003f) * Mathf.Pow(1f - t / duration, 2f);
+                    float frequency = Mathf.Lerp(850f, 110f, Mathf.Min(1f, t / .13f));
+                    phase += frequency * Mathf.PI * 2f / sampleRate;
+                    samples[i] = (Mathf.Sin(phase) * .65f + ((float)noise.NextDouble() * 2f - 1f) * .35f) * envelope;
+                }
+                deathAudioClip = AudioClip.Create("Enemy death burst", samples.Length, 1, sampleRate, false);
+                deathAudioClip.SetData(samples, 0);
+            }
+            lastDeathSoundFrame = Time.frameCount;
+            deathAudioSource.PlayOneShot(deathAudioClip);
+        }
+
+        private void ShowDeathParticles(GridPosition position, int count)
+        {
+            if (deathParticles == null)
+            {
+                GameObject effect = new("Enemy Death Particles");
+                effect.transform.SetParent(transform, false);
+                deathParticles = effect.AddComponent<ParticleSystem>();
+                deathParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                var main = deathParticles.main;
+                main.playOnAwake = false;
+                main.loop = true;
+                main.startSpeed = 0f;
+                main.maxParticles = 2048;
+                main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                main.useUnscaledTime = true;
+                var emission = deathParticles.emission; emission.enabled = false;
+                var shape = deathParticles.shape; shape.enabled = false;
+                var color = deathParticles.colorOverLifetime; color.enabled = true;
+                Gradient fade = new();
+                fade.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                    new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, .15f), new GradientAlphaKey(0f, 1f) });
+                color.color = fade;
+                var size = deathParticles.sizeOverLifetime; size.enabled = true;
+                size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0f));
+                deathParticleMaterial = new Material(Shader.Find("Sprites/Default"));
+                var renderer = effect.GetComponent<ParticleSystemRenderer>();
+                renderer.sharedMaterial = deathParticleMaterial;
+                renderer.sortingOrder = 18;
+                deathParticles.Play();
+            }
+            Vector3 origin = GameConfig.LogicalToWorld(position, -.3f);
+            // Fixed variation keeps cosmetic particles out of the gameplay random sequence used by undo.
+            for (int i = 0; i < count; i++)
+            {
+                float angle = i * 2.399963f;
+                var particle = new ParticleSystem.EmitParams
+                {
+                    position = origin,
+                    velocity = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * (1.2f + i % 5 * .45f),
+                    startLifetime = .3f + i % 4 * .07f,
+                    startSize = .08f + i % 3 * .035f,
+                    startColor = Color.Lerp(new Color(1f, .25f, .12f), new Color(1f, .9f, .45f), (i % 5) / 4f)
+                };
+                deathParticles.Emit(particle, 1);
+            }
+        }
+
         private void OnDestroy()
         {
+            if (deathParticleMaterial != null) Destroy(deathParticleMaterial);
+            if (deathAudioClip != null) Destroy(deathAudioClip);
             if (coreState != null) coreState.Changed -= SynchronizeCoreEnergy;
             if (turnManager != null)
             {

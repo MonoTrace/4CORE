@@ -51,6 +51,9 @@ namespace FourCore
         private EnemyManager enemies;
         private bool initialized;
         private bool damageCameraActive;
+        private bool rewardTransition;
+        private RewardIris rewardIris;
+        private Vector2 rewardTitlePosition, rewardPromptPosition;
         private Vector3 damageCameraOrigin;
         private float damageCameraZoom;
 
@@ -95,6 +98,18 @@ namespace FourCore
             enemies.RewardRequested+=ShowReward;
             if(rewardGroup!=null)
             {
+                var irisObject = new GameObject("Reward Iris", typeof(RectTransform), typeof(CanvasRenderer));
+                var irisRect = (RectTransform)irisObject.transform;
+                irisRect.SetParent(rewardGroup.transform, false);
+                irisRect.anchorMin = Vector2.zero; irisRect.anchorMax = Vector2.one;
+                irisRect.offsetMin = irisRect.offsetMax = Vector2.zero;
+                irisRect.SetAsFirstSibling();
+                rewardIris = irisObject.AddComponent<RewardIris>();
+                rewardIris.raycastTarget = false;
+                var backdrop = rewardGroup.transform.Find("Backdrop");
+                if (backdrop != null) backdrop.gameObject.SetActive(false);
+                rewardTitlePosition = ((RectTransform)rewardGroup.transform.Find("Title")).anchoredPosition;
+                rewardPromptPosition = ((RectTransform)rewardGroup.transform.Find("Prompt")).anchoredPosition;
                 ConfigureAugmentChoices();
                 rewardGroup.gameObject.SetActive(false);
                 freezeReward.onClick.AddListener(ChooseFreeze);
@@ -138,16 +153,101 @@ namespace FourCore
             if(rewardGroup==null)throw new System.InvalidOperationException("Assign the between-stage augment selection screen.");
             State=GameFlowState.Reward;controls.SetGameplayInput(false);
             ConfigureAugmentChoices();
+            rewardTransition = true;
             freezeReward.interactable=shieldReward.interactable=repairReward.interactable=true;
-            rewardGroup.gameObject.SetActive(true);rewardGroup.alpha=1f;
+            rewardGroup.alpha=1f;rewardGroup.gameObject.SetActive(true);
             rewardGroup.transform.SetAsLastSibling();
-            rewardGroup.interactable=rewardGroup.blocksRaycasts=true;
-            if(UnityEngine.EventSystems.EventSystem.current!=null)
+            rewardGroup.interactable=false;rewardGroup.blocksRaycasts=true;
+            StartCoroutine(RevealRewards());
+        }
+
+        private UnityEngine.UI.Button[] RewardCards => new[] { freezeReward, shieldReward, repairReward };
+
+        private Vector2 RewardPoint(Vector3 worldPosition)
+        {
+            Canvas canvas = rewardGroup.GetComponentInParent<Canvas>().rootCanvas;
+            Camera uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)rewardGroup.transform,
+                output.WorldToScreenPoint(worldPosition), uiCamera, out Vector2 point);
+            return point;
+        }
+
+        private float IrisCoverRadius(Vector2 center)
+        {
+            Rect rect = ((RectTransform)rewardGroup.transform).rect;
+            float x = Mathf.Max(Mathf.Abs(rect.xMin - center.x), Mathf.Abs(rect.xMax - center.x));
+            float y = Mathf.Max(Mathf.Abs(rect.yMin - center.y), Mathf.Abs(rect.yMax - center.y));
+            return new Vector2(x, y).magnitude + 8f;
+        }
+
+        private void SetRewardChrome(float opacity)
+        {
+            foreach (Transform child in rewardGroup.transform)
+            {
+                if (child == rewardIris.transform || child.name == "Backdrop" ||
+                    child == freezeReward.transform || child == shieldReward.transform || child == repairReward.transform) continue;
+                var group = child.GetComponent<CanvasGroup>();
+                if (group == null) group = child.gameObject.AddComponent<CanvasGroup>();
+                group.alpha = opacity; group.interactable = group.blocksRaycasts = false;
+            }
+        }
+
+        private IEnumerator RevealRewards()
+        {
+            var cards = RewardCards;
+            Canvas.ForceUpdateCanvases();
+            SetRewardChrome(0f);
+            float[] belowScreen = new float[cards.Length];
+            for (int i = 0; i < cards.Length; i++)
+            {
+                var view = cards[i].GetComponent<AugmentCardView>();
+                belowScreen[i] = ((RectTransform)rewardGroup.transform).rect.yMin -
+                    ((RectTransform)cards[i].transform).rect.height * .5f - view.RestingPosition.y - 50f;
+                view.Present(1f, 1f, belowScreen[i], 0f);
+            }
+            Vector2 center = RewardPoint(enemies.LastDeathWorldPosition);
+            rewardIris.SetDisc(center, 0f);
+            if (UnityEngine.EventSystems.EventSystem.current != null)
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+            while (controls.PresentationInputLocked) yield return null;
+            for (float age = 0f; age < .65f; age += Time.unscaledDeltaTime)
+            {
+                // Recompute projection after any camera hit reaction and while the window resizes.
+                center = RewardPoint(enemies.LastDeathWorldPosition);
+                float t = Mathf.SmoothStep(0f, 1f, age / .65f);
+                rewardIris.SetDisc(center, IrisCoverRadius(center) * t);
+                hudGroup.alpha = 1f - t;
+                yield return null;
+            }
+            rewardIris.SetDisc(center, IrisCoverRadius(center));
+            hudGroup.alpha = 0f;
+            yield return new WaitForSecondsRealtime(.35f);
+            for (float age = 0f; age < .9f; age += Time.unscaledDeltaTime)
+            {
+                rewardIris.SetDisc(center, IrisCoverRadius(center));
+                SetRewardChrome(Mathf.SmoothStep(0f, 1f, age / .35f));
+                for (int i = 0; i < cards.Length; i++)
+                {
+                    float t = Mathf.SmoothStep(0f, 1f, (age - i * .09f) / .65f);
+                    cards[i].GetComponent<AugmentCardView>().Present(1f, 1f, belowScreen[i] * (1f - t), 0f);
+                }
+                yield return null;
+            }
+            SetRewardChrome(1f);
+            foreach (var card in cards) card.GetComponent<AugmentCardView>().EndPresentation();
+            rewardTransition = false; rewardGroup.interactable = true;
+            if (UnityEngine.EventSystems.EventSystem.current != null)
                 UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(shieldReward.gameObject);
         }
         private void ConfigureAugmentChoices()
         {
+            var footer = rewardGroup.transform.Find("FooterHint");
+            if (footer != null) footer.gameObject.SetActive(false);
             if (enemies.Run.RewardChoices.Count != 3) return;
+            ((RectTransform)rewardGroup.transform.Find("Title")).anchoredPosition = rewardTitlePosition;
+            ((RectTransform)rewardGroup.transform.Find("Prompt")).anchoredPosition = rewardPromptPosition;
+            foreach (var label in rewardGroup.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                if (label.name == "AugmentEyebrow") label.gameObject.SetActive(true);
             UnityEngine.UI.Button[] cards = { freezeReward, shieldReward, repairReward };
             string[] descriptions = { "FreezeDescription", "ShieldDescription", "RepairDescription" };
             for (int i = 0; i < cards.Length; i++)
@@ -158,16 +258,14 @@ namespace FourCore
                 {
                     if (text.name == descriptions[i]) text.text = AugmentCatalog.Description(type, enemies.Run);
                     if (text.name == "Category") { text.text = AugmentCatalog.Category(type); text.color = AugmentCatalog.Color(type); }
-                    if (text.name == "SelectionHint") text.color = AugmentCatalog.Color(type);
+                    if (text.name == "SelectionHint") text.gameObject.SetActive(false);
                 }
                 cards[i].GetComponentInChildren<AugmentCardArtwork>(true)?.Configure(type, AugmentCatalog.Color(type));
             }
             foreach (var text in rewardGroup.GetComponentsInChildren<TMPro.TMP_Text>(true))
             {
                 if (text.name == "Title") text.text = $"STAGE {enemies.Run.Chapter} CLEAR";
-                if (text.name == "Prompt") text.text = enemies.Run.PrimaryAugment.HasValue
-                    ? "선택한 전투 방식을 강화할 증강 하나를 선택하세요"
-                    : "증강 하나를 선택하세요 · 효과는 이번 플레이 동안 유지됩니다";
+                if (text.name == "Prompt") text.text = "증강 하나를 선택하세요";
             }
         }
         private void ChooseFreeze()=>ChooseSlot(0);
@@ -175,16 +273,59 @@ namespace FourCore
         private void ChooseRepair()=>ChooseSlot(2);
         private void ChooseSlot(int slot)
         {
-            if (enemies.Run.RewardChoices.Count == 3) ChooseReward(enemies.Run.RewardChoices[slot]);
+            if (!rewardTransition && enemies.Run.RewardChoices.Count == 3) ChooseReward(enemies.Run.RewardChoices[slot], slot);
         }
-        private void ChooseReward(AugmentType type)
+        private void ChooseReward(AugmentType type, int slot)
         {
-            if(State!=GameFlowState.Reward || !enemies.ChooseReward(type))return;
-            rewardGroup.gameObject.SetActive(false);State=GameFlowState.Playing;controls.SetGameplayInput(true);
+            if(State!=GameFlowState.Reward || rewardTransition || !enemies.ChooseReward(type))return;
+            rewardTransition = true;
+            rewardGroup.interactable = false;
+            freezeReward.interactable = shieldReward.interactable = repairReward.interactable = false;
             if(UnityEngine.EventSystems.EventSystem.current!=null)
                 UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+            StartCoroutine(AcceptReward(slot, type));
         }
 
+        private IEnumerator AcceptReward(int selected, AugmentType type)
+        {
+            var cards = RewardCards;
+            var chosen = cards[selected].GetComponent<AugmentCardView>();
+            Vector2 origin = ((RectTransform)cards[selected].transform).anchoredPosition;
+            float initialScale = cards[selected].transform.localScale.x;
+            Vector2 center = rewardIris.Center;
+            // First turn the full-size choice into a small, still recognizable card.
+            for (float age = 0f; age < .25f; age += Time.unscaledDeltaTime)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, age / .25f);
+                chosen.PresentAt(1f, Mathf.Lerp(initialScale, .24f, t), origin, 1f);
+                for (int i = 0; i < cards.Length; i++)
+                    if (i != selected) cards[i].GetComponent<AugmentCardView>().Present(1f - t, 1f - .08f * t, -90f * t, 0f);
+                SetRewardChrome(1f - t);
+                rewardIris.SetDisc(center, IrisCoverRadius(center), 1f - .35f * t);
+                hudGroup.alpha = t;
+                yield return null;
+            }
+            // Reveal the world as the small card travels to the player's projected position.
+            for (float age = 0f; age < .75f; age += Time.unscaledDeltaTime)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, age / .75f);
+                Vector2 target = RewardPoint(player.position);
+                Vector2 bend = Vector2.Lerp(origin, target, .5f) + Vector2.up * 100f;
+                Vector2 position = (1f-t)*(1f-t)*origin + 2f*(1f-t)*t*bend + t*t*target;
+                chosen.PresentAt(1f - Mathf.SmoothStep(0f, 1f, (t - .82f) / .18f),
+                    Mathf.Lerp(.24f, .035f, t), position, 1f);
+                rewardIris.SetDisc(center, IrisCoverRadius(center), .65f * (1f - Mathf.SmoothStep(0f, 1f, age / .3f)));
+                yield return null;
+            }
+            chosen.PresentAt(0f, .035f, RewardPoint(player.position), 1f);
+            SpawnPulse.Play(player, player.position, AugmentCatalog.Color(type), 1.25f);
+            yield return new WaitForSecondsRealtime(.2f);
+            rewardIris.SetDisc(center, 0f, 0f);
+            rewardGroup.gameObject.SetActive(false);
+            foreach (var card in cards) card.GetComponent<AugmentCardView>().EndPresentation();
+            hudGroup.alpha = 1f;
+            rewardTransition = false; State = GameFlowState.Playing; controls.SetGameplayInput(true);
+        }
         private void HandleGameOver()
         {
             if (State != GameFlowState.Playing) return;
@@ -288,6 +429,7 @@ namespace FourCore
         {
             if (!initialized || State != GameFlowState.Title) return;
             SelectedMode = mode;
+            board.SetMode(mode);
             score?.SetEnabled(mode == GameMode.Infinite);
             enemies.Run.ConfigureMode(mode);
             State = GameFlowState.Starting;

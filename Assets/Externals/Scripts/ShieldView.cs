@@ -12,6 +12,7 @@ namespace FourCore
         private AugmentCombatState augments;
         private readonly List<(LineRenderer Line, float Started)> blasts = new();
         private Material effectMaterial;
+        private readonly List<(LineRenderer Line, Vector3 Origin, Vector3 Velocity, float Angle, float Spin, float Started, Color Tint)> shards = new();
 
         public void BindAugments(RunState runState, AugmentCombatState state, TurnManager turns)
         { run = runState; augments = state; }
@@ -84,8 +85,43 @@ namespace FourCore
                 line.loop = true; line.positionCount = 32; blasts.Add((line, Time.unscaledTime));
             }
         }
+        public void ShowBreak(GridPosition position)
+        {
+            Color tint = run?.PrimaryAugment != null ? AugmentCatalog.Color(run.PrimaryAugment.Value) : new Color(.3f, .7f, 1f);
+            Vector3 center = GameConfig.LogicalToWorld(position, -.32f);
+            // Eight pieces of the barrier rim fly apart without consuming gameplay randomness.
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * Mathf.PI / 4f;
+                Vector3 direction = new(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+                var line = NewLine("Shield shard", .065f);
+                line.positionCount = 3; line.numCapVertices = 2;
+                line.SetPosition(0, new Vector3(-.12f, -.04f, 0f));
+                line.SetPosition(1, new Vector3(0f, .06f, 0f));
+                line.SetPosition(2, new Vector3(.12f, .02f, 0f));
+                Vector3 origin = center + direction * .3f;
+                line.transform.localPosition = origin;
+                line.transform.localRotation = Quaternion.Euler(0f, 0f, angle * Mathf.Rad2Deg);
+                line.startColor = line.endColor = Color.white;
+                shards.Add((line, origin, direction * (1.7f + i % 3 * .35f), angle * Mathf.Rad2Deg,
+                    i % 2 == 0 ? 230f : -230f, Time.unscaledTime, tint));
+            }
+        }
         private void Update()
         {
+            for (int i = shards.Count - 1; i >= 0; i--)
+            {
+                var shard = shards[i];
+                float age = Time.unscaledTime - shard.Started;
+                float t = age / .45f;
+                if (t >= 1f) { shard.Line.gameObject.SetActive(false); Destroy(shard.Line.gameObject); shards.RemoveAt(i); continue; }
+                shard.Line.transform.localPosition = shard.Origin + shard.Velocity * (age * (1f - t * .3f));
+                shard.Line.transform.localRotation = Quaternion.Euler(0f, 0f, shard.Angle + shard.Spin * age);
+                shard.Line.transform.localScale = Vector3.one * (1f - t * .55f);
+                Color color = Color.Lerp(Color.white, shard.Tint, Mathf.Min(1f, t * 4f));
+                color.a = 1f - t;
+                shard.Line.startColor = shard.Line.endColor = color;
+            }
             for (int i = blasts.Count-1; i >= 0; i--)
             {
                 float t = (Time.unscaledTime-blasts[i].Started)/.35f;
@@ -98,6 +134,8 @@ namespace FourCore
         }
         public void ClearTransient()
         {
+            foreach (var shard in shards) { shard.Line.gameObject.SetActive(false); Destroy(shard.Line.gameObject); }
+            shards.Clear();
             foreach (var blast in blasts) { blast.Line.gameObject.SetActive(false); Destroy(blast.Line.gameObject); }
             blasts.Clear();
         }

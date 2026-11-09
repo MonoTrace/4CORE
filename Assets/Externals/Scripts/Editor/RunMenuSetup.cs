@@ -62,7 +62,7 @@ namespace FourCore.EditorTools
             {
                 GameObject reward=CanvasRoot("RewardScreen",290);
                 Label(reward.transform,"Title","STAGE CLEAR",58,0,270,1000,90,font).fontStyle=FontStyles.Bold;
-                Label(reward.transform,"Prompt","증강 하나를 선택하세요 · 이번 플레이 동안 효과가 누적됩니다",28,0,175,1400,65,font);
+                Label(reward.transform,"Prompt","증강 하나를 선택하세요",28,0,175,1400,65,font);
                 UnityEngine.UI.Button freeze=Button(reward.transform,"FreezeReward","시간 정지 +2턴",-470,15,font);
                 UnityEngine.UI.Button shield=Button(reward.transform,"ShieldReward","쉴드 에너지 +1",0,15,font);
                 UnityEngine.UI.Button repair=Button(reward.transform,"RepairReward","코어 회복 속도 +1",470,15,font);

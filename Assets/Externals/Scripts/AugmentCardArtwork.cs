@@ -22,40 +22,15 @@ namespace FourCore
             Rect r = GetPixelAdjustedRect();
             float w = r.width, h = r.height;
             Vector2 center = r.center;
-            Color luminous = Color.Lerp(accent, Color.white, .32f);
-            for (int i = 5; i >= 1; i--)
-                Ring(mesh, center, w + i * 7, h + i * 7, 19 + i * 3, 7,
-                    Tint(accent, (.012f + emphasis * .035f) * (6 - i)));
-            Polygon(mesh, Bevel(center, w, h, 20), new Color(.018f, .026f, .057f, 1));
-            // A tinted upper field gives the emblem space above the text.
-            Quad(mesh, center + new Vector2(-w / 2 + 6, 5), new Vector2(w - 12, h / 2 - 11),
-                Tint(accent, .015f), Tint(accent, .12f + emphasis * .09f));
-            Ring(mesh, center, w, h, 20, 2.5f + emphasis, Tint(luminous, .72f + emphasis * .28f));
-            Ring(mesh, center, w - 17, h - 17, 14, .8f, Tint(accent, .28f + emphasis * .27f));
-            // Fine corner hardware and the top/bottom diamonds echo a collectible card.
-            foreach (int side in new[] { -1, 1 })
-            {
-                float x = center.x + side * (w / 2 - 18);
-                Line(mesh, new Vector2(x, center.y + h / 2 - 52), new Vector2(x, center.y + h / 2 - 25), 3, luminous);
-                Line(mesh, new Vector2(x, center.y - h / 2 + 25), new Vector2(x, center.y - h / 2 + 52), 3, luminous);
-            }
-            Diamond(mesh, center + new Vector2(0, h / 2), 10, luminous);
-            Diamond(mesh, center + new Vector2(0, -h / 2), 8, luminous);
+            Color luminous = Color.Lerp(accent, Color.white, .25f);
+            Polygon(mesh, Bevel(center, w, h, 10), new Color(.025f, .035f, .065f, 1f));
+            Ring(mesh, center, w, h, 10, 1.5f + emphasis, Tint(luminous, .45f + emphasis * .55f));
+            // One accent edge and one emblem keep the choice readable at a glance.
+            Line(mesh, center + new Vector2(-w / 2 + 22, h / 2 - 2),
+                center + new Vector2(w / 2 - 22, h / 2 - 2), 3f, luminous);
             Vector2 icon = center + new Vector2(0, 109);
-            Halo(mesh, icon, 91, Tint(accent, .17f + emphasis * .16f));
-            RingDiamond(mesh, icon, 91, 1.2f, Tint(accent, .28f));
-            RingDiamond(mesh, icon, 76, 1.5f, Tint(accent, .5f + emphasis * .3f));
+            Halo(mesh, icon, 62, Tint(accent, .08f + emphasis * .12f));
             DrawEmblem(mesh, icon, luminous);
-            Line(mesh, center + new Vector2(-w * .33f, -99), center + new Vector2(-12, -99), 1, Tint(accent, .42f));
-            Line(mesh, center + new Vector2(12, -99), center + new Vector2(w * .33f, -99), 1, Tint(accent, .42f));
-            Diamond(mesh, center + new Vector2(0, -99), 4, luminous);
-            // Moving light across the frame only appears during focus/hover.
-            if (emphasis > .01f)
-            {
-                float y = Mathf.Lerp(-h / 2 + 36, h / 2 - 36, Mathf.PingPong(Time.unscaledTime * .22f, 1));
-                foreach (int side in new[] { -1, 1 })
-                    Diamond(mesh, center + new Vector2(side * (w / 2 - 1), y), 4, Tint(Color.white, emphasis * .85f));
-            }
         }
 
         private void Update() { if (emphasis > .01f) SetVerticesDirty(); }

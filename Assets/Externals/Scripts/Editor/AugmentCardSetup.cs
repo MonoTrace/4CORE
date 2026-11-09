@@ -40,7 +40,8 @@ namespace FourCore.EditorTools
             Undo.RecordObject(backdrop, "Darken augment backdrop");
             backdrop.color = new Color(.008f, .012f, .028f, .975f);
             Text(group.transform, "AugmentEyebrow", "A U G M E N T S", font, 20, 0, 452, 900, 30, Gold);
-            Text(group.transform, "FooterHint", "카드 하나를 선택해 다음 스테이지로 진행", font, 22, 0, -420, 1200, 40, new Color(.43f, .49f, .61f));
+            Transform footer = group.transform.Find("FooterHint");
+            if (footer != null) { footer.gameObject.SetActive(false); EditorUtility.SetDirty(footer.gameObject); }
 
             Card(group.transform, freeze, "FreezeDescription", AugmentType.LongerFreeze, Ice, -460, "UTILITY  /  01", font);
             Card(group.transform, shield, "ShieldDescription", AugmentType.ShieldEnergy, Gold, 0, "DEFENSE  /  02", font);
@@ -84,7 +85,8 @@ namespace FourCore.EditorTools
             description.fontSize = 22; description.lineSpacing = 4;
             description.color = new Color(.69f, .74f, .84f); description.raycastTarget = false;
             Text(rect, "Category", category, font, 18, 0, 236, 340, 30, accent);
-            TMP_Text hint = Text(rect, "SelectionHint", "선택하기   →", font, 20, 0, -246, 340, 32, accent);
+            TMP_Text hint = rect.Find("SelectionHint")?.GetComponent<TMP_Text>();
+            if (hint != null) { hint.gameObject.SetActive(false); EditorUtility.SetDirty(hint.gameObject); }
             var hover = button.GetComponent<AugmentCardView>();
             if (hover == null) hover = Undo.AddComponent<AugmentCardView>(button.gameObject);
             hover.Configure(art, hint); EditorUtility.SetDirty(hover);

@@ -24,11 +24,11 @@ namespace FourCore
         public int VolleyCount { get; private set; }
         public int PendingSplits { get; private set; }
         public bool WaitingForPulse { get; private set; }
-        public bool PhasePattern => Theme==StageTheme.Phase;
-        public bool BodyVisible => !PhasePattern || MoveCount==0 || MoveCount%2==1;
+        public bool BodyVisible => true;
         public bool UsesResonance => Theme==StageTheme.Artillery && VolleyCount%2==1;
         public bool UsesStraightCharge => Theme==StageTheme.Assault;
-        public bool UsesCharge => UsesStraightCharge || PhasePattern;
+        public bool UsesDiagonalCharge => StageNumber == 2;
+        public bool UsesCharge => UsesStraightCharge || UsesDiagonalCharge;
         public void BeginPulseWait()=>WaitingForPulse=true;
         public void EndPulseWait()=>WaitingForPulse=false;
         public void EndVolley()
@@ -43,6 +43,7 @@ namespace FourCore
         public int Side { get; private set; }
         public int RestTurns { get; private set; }
         public int TeleportSerial { get; private set; }
+        public GridPosition LastDestroyedCell { get; private set; }
         public int Health(int index) => health[index];
         public bool Defeated => Array.TrueForAll(health, hp => hp <= 0);
         public bool HasMissiles => Array.Exists(Missiles, m => m.Active);
@@ -58,9 +59,8 @@ namespace FourCore
         {
             if (UsesStraightCharge)
                 return Origin.Offset(Side switch { 0=>Vector2Int.down,1=>Vector2Int.left,2=>Vector2Int.up,_=>Vector2Int.right });
-            int dx=Origin.X+1>GameConfig.CoreMax?-1:1,dy=Origin.Y+1>GameConfig.CoreMax?-1:1;
-            Vector2Int step=(PatternStep%4) switch { 1=>new Vector2Int(dx,-dy),3=>new Vector2Int(-dx,dy),_=>new Vector2Int(dx,dy) };
-            return Origin.Offset(step);
+            return Origin.Offset(Side switch { 0 => new Vector2Int(-1,-1), 1 => new Vector2Int(-1,1),
+                2 => new Vector2Int(1,1), _ => new Vector2Int(1,-1) });
         }
         public void MoveCharge(GridPosition destination) { Origin=destination;PatternStep++;MoveCount++;RestTurns=1; }
         public bool Occupies(GridPosition position)
@@ -90,6 +90,7 @@ namespace FourCore
             Rotation=MoveCount=VolleyCount=PendingSplits=0;WaitingForPulse=false;
             for (int i = 0; i < health.Length; i++) health[i] = i<CellCount ? StageNumber == 1 ? 2 : 3 : 0;
             Teleport(side);
+            LastDestroyedCell = Origin;
         }
         public void Teleport(int side)
         {
@@ -107,6 +108,7 @@ namespace FourCore
                 if (health[i] > 0 && Cell(i).Equals(position))
                 {
                     health[i]--;
+                    if (health[i] == 0) LastDestroyedCell = position;
                     return true;
                 }
             return false;
@@ -121,8 +123,7 @@ namespace FourCore
         public void Fire(CoreState core)
         {
             foreach(BossProjectile m in Missiles)m.Active=false;
-            if(UsesStraightCharge)return;
-            if(IsCross){FireDiagonal(core);return;}
+            if(UsesCharge)return;
             Vector2Int direction = Side switch { 0 => Vector2Int.down, 1 => Vector2Int.left,
                 2 => Vector2Int.up, _ => Vector2Int.right };
             for (int lane = 0; lane < 2; lane++)
@@ -149,33 +150,12 @@ namespace FourCore
                 missile.Active = true; missile.Reflected = false; missile.SourceCell = source;
             }
         }
-        private void FireDiagonal(CoreState core)
-        {
-            int count=0;
-            for(int target=0;target<core.CellCount && count<Missiles.Length;target++)
-            {
-                if(!core.IsAlive(target))continue;
-                GridPosition cell=core.GetCell(target);int source=-1,nearest=int.MaxValue;Vector2Int aim=default;
-                for(int i=0;i<CellCount;i++)
-                {
-                    if(health[i]<=0)continue;
-                    GridPosition from=Cell(i);int dx=cell.X-from.X,dy=cell.Y-from.Y;
-                    if(dx==0 || Mathf.Abs(dx)!=Mathf.Abs(dy))continue;
-                    int distance=Mathf.Abs(dx);Vector2Int direction=new(Math.Sign(dx),Math.Sign(dy));
-                    GridPosition ray=from;bool blocked=false;
-                    for(int step=1;step<distance;step++){ray=ray.Offset(direction);if(core.Occupies(ray)){blocked=true;break;}}
-                    if(!blocked && distance<nearest){source=i;nearest=distance;aim=direction;}
-                }
-                if(source<0)continue;
-                BossProjectile m=Missiles[count++];m.Position=Cell(source);m.Direction=aim;m.Active=true;m.Reflected=false;m.SourceCell=source;
-            }
-        }
         public BossState Copy()
         {
             BossState result = new() { Active = Active, Origin = Origin, Side = Side,
                 RestTurns = RestTurns, TeleportSerial = TeleportSerial,IsCross=IsCross,PatternStep=PatternStep,
                 StageNumber=StageNumber,Rotation=Rotation,MoveCount=MoveCount,VolleyCount=VolleyCount,
-                PendingSplits=PendingSplits,WaitingForPulse=WaitingForPulse };
+                PendingSplits=PendingSplits,WaitingForPulse=WaitingForPulse,LastDestroyedCell=LastDestroyedCell };
             Array.Copy(health, result.health, health.Length);
             for (int i = 0; i < Missiles.Length; i++) result.Missiles[i] = Missiles[i].Copy();
             return result;
@@ -186,6 +166,7 @@ namespace FourCore
             RestTurns = saved.RestTurns; TeleportSerial = saved.TeleportSerial;
             IsCross=saved.IsCross;PatternStep=saved.PatternStep;
             StageNumber=saved.StageNumber;Rotation=saved.Rotation;MoveCount=saved.MoveCount;
+            LastDestroyedCell=saved.LastDestroyedCell;
             VolleyCount=saved.VolleyCount;PendingSplits=saved.PendingSplits;WaitingForPulse=saved.WaitingForPulse;
             Array.Copy(saved.health, health, health.Length);
             for (int i = 0; i < Missiles.Length; i++) Missiles[i] = saved.Missiles[i].Copy();

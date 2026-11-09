@@ -84,46 +84,33 @@ namespace FourCore.EditorTools
 
         public static string CrossBoss()
         {
-            EnemyManager manager=UnityEngine.Object.FindAnyObjectByType<EnemyManager>();
-            CoreState core=Read<CoreState>(manager,"coreState");CoreView coreView=Read<CoreView>(manager,"coreView");
-            ShieldState shields=Read<ShieldState>(manager,"shieldState");ShieldView shieldView=Read<ShieldView>(manager,"shieldView");
-            PlayerState player=Read<PlayerState>(manager,"playerState");TurnManager turns=Read<TurnManager>(manager,"turnManager");
-            core.Restore(new int[4]);coreView.Apply(core,false);shields.Restore(Array.Empty<GridPosition>());
-            player.Restore(new GridPosition(8,8),FacingDirection.Up);
-            EnemyManager.Snapshot snap=manager.Capture();Set(snap,"States",Array.Empty<EnemyState>());Set(snap,"Run",new RunState());Set(snap,"TurnsUntilSpawn",1000);manager.Restore(snap);
-            manager.Run.CompleteBoss();StageThemeChecks.SkipBossReward(manager.Run);manager.Run.BeginBoss();manager.Boss.Begin(0,2);
+            StageThemeChecks.ShowBoss(2);
+            var manager=UnityEngine.Object.FindAnyObjectByType<EnemyManager>();
+            var core=Read<CoreState>(manager,"coreState");
+            var shields=Read<ShieldState>(manager,"shieldState");
+            var turns=Read<TurnManager>(manager,"turnManager");
             BossState boss=manager.Boss;
-            Require(boss.IsCross&&boss.CellCount==5,"five-cell cross boss");
+            Require(boss.IsCross&&boss.CellCount==5&&boss.UsesDiagonalCharge,"five-cell diagonal charger");
             for(int i=0;i<5;i++)Require(boss.Health(i)==3,"cross boss HP3");
+            GridPosition origin=boss.Origin;
             turns.CompletePlayerAction();turns.CompletePlayerAction();
-            int active=0;foreach(BossProjectile m in boss.Missiles)
-            {
-                if(!m.Active)continue;active++;
-                Require(Mathf.Abs(m.Direction.x)==1&&Mathf.Abs(m.Direction.y)==1,"diagonal shots");
-                shields.TryAdd(m.Position.Offset(m.Direction*2));
-            }
-            Require(active>=2,"cross boss attacks more than one core");shieldView.Apply(shields);
-            turns.CompletePlayerAction();turns.CompletePlayerAction();turns.CompletePlayerAction();
-            GridPosition next=boss.NextCharge();GridPosition blockedCell=boss.CellAt(next,1);
-            shields.TryAdd(blockedCell);shieldView.Apply(shields);
-            int health=boss.Health(1);turns.CompletePlayerAction();
-            Require(!shields.Contains(blockedCell)&&boss.Side!=0&&boss.Health(1)<health,"shield stops charge and damages boss");
-            Require(core.AliveCount==4,"cross reflected missiles protect core");
+            Require(boss.Origin.X==origin.X-1&&boss.Origin.Y==origin.Y-1&&!boss.HasMissiles,"diagonal body advances without firing");
             BossState saved=boss.Copy();boss.TryDamage(boss.Cell(0));boss.Restore(saved);
-            Require(boss.Health(0)==saved.Health(0)&&boss.PatternStep==saved.PatternStep,"cross snapshot");
-            int cycles=0;
-            while(boss.Active&&cycles++<35)
+            Require(boss.Health(0)==saved.Health(0)&&boss.NextCharge().Equals(saved.NextCharge()),"charge snapshot");
+            for(int turn=0;turn<240&&boss.Active;turn++)
             {
-                if(!boss.HasMissiles){turns.CompletePlayerAction();turns.CompletePlayerAction();}
-                foreach(BossProjectile m in boss.Missiles)if(m.Active&&!m.Reflected)shields.TryAdd(m.Position.Offset(m.Direction*2));
-                shieldView.Apply(shields);int deadline=24;
-                while(boss.HasMissiles&&deadline-->0)turns.CompletePlayerAction();
-                Require(deadline>0,"cross missiles resolve");
+                shields.Restore(Array.Empty<GridPosition>());
+                for(int i=0;i<boss.CellCount;i++)if(boss.Health(i)>0)
+                {
+                    GridPosition next=boss.CellAt(boss.NextCharge(),i);
+                    if(!boss.Occupies(next)&&!core.Occupies(next)&&GameConfig.IsInsidePlayable(next))shields.TryAdd(next);
+                }
+                turns.CompletePlayerAction();
+                Require(core.AliveCount==4&&!boss.HasMissiles&&manager.Beams.Count==0,"shield counters protect core; no old attacks");
             }
-            Require(!boss.Active&&manager.Run.NeedsReward,"phase boss waits for augment");StageThemeChecks.AcceptAugment(AugmentType.ShieldEnergy);Require(manager.Run.Chapter==3&&!manager.Run.IsInfinite&&!manager.Run.NeedsReward,"phase boss advances to refraction stage");
-            return "PASS: cross shape, five HP3 cells, diagonal volley, shield stops charge, reflected player safety, snapshots, full defeat and stage3 progression";
+            Require(!boss.Active&&manager.Run.NeedsReward,"diagonal boss defeated and awaits augment");
+            return "PASS: cross HP, diagonal charge, no projectiles, shield counters, snapshots and full defeat";
         }
-
         private static string Fingerprint(EnemyManager manager,PlayerController controls)
         {
             EnemyManager.Snapshot snapshot=manager.Capture();RunState r=manager.Run;BossState b=manager.Boss;

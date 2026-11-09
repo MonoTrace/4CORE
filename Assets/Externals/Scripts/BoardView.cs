@@ -9,6 +9,8 @@ namespace FourCore
 
         private Mesh gridMesh;
         private Material gridMaterial;
+        private Color modeColor;
+        private float visibility = 1f;
 
         public void Initialize()
         {
@@ -24,6 +26,7 @@ namespace FourCore
             MeshRenderer meshRenderer = gridObject.AddComponent<MeshRenderer>();
 
             gridMesh = CreateGridMesh();
+            modeColor = gridColor;
             gridMaterial = CreateUnlitMaterial(gridColor, "Grid Material");
             gridMaterial.SetOverrideTag("RenderType", "Transparent");
             gridMaterial.renderQueue = (int)RenderQueue.Transparent;
@@ -72,10 +75,17 @@ namespace FourCore
 
         public void SetVisibility(float opacity)
         {
+            visibility = Mathf.Clamp01(opacity);
             if (gridMaterial == null) return;
-            Color color = gridColor;
-            color.a *= Mathf.Clamp01(opacity);
+            Color color = modeColor;
+            color.a *= visibility;
             gridMaterial.color = color;
+        }
+
+        public void SetMode(GameMode mode)
+        {
+            modeColor = mode == GameMode.Infinite ? new Color(1f, 0.12f, 0.16f, 1f) : gridColor;
+            SetVisibility(visibility);
         }
 
         public static Material CreateUnlitMaterial(Color color, string materialName)

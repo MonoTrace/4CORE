@@ -24,6 +24,13 @@ namespace FourCore
         private Material freezeMaterial,originalFreezeMaterial;
         private bool wasFrozen;
         private float freezeAge,freezeAlpha;
+        private float progressFrom, progressTarget, progressAge;
+        private int progressChapter;
+        private GameMode progressMode;
+        private const float ProgressDuration = 0.35f;
+        private LineRenderer shieldGlow;
+        private bool wasShielded;
+        private float shieldAge = 1f;
         public void Initialize(EnemyManager encounter, PlayerController controls, PlayerView player)
         {
             this.encounter = encounter; this.controls = controls; this.player = player.transform;
@@ -32,6 +39,15 @@ namespace FourCore
             originalFreezeMaterial=freezeTint.material;freezeMaterial=new Material(originalFreezeMaterial);freezeTint.material=freezeMaterial;
             encounter.Run.Notice += ShowNotice;
             encounter.PlayerDamaged += Hit;
+            encounter.PickupCollected += PickupFeedback;
+            shieldGlow = new GameObject("Personal Shield Glow").AddComponent<LineRenderer>();
+            shieldGlow.transform.SetParent(personalShield.transform, false);
+            shieldGlow.sharedMaterial = personalShield.sharedMaterial;
+            shieldGlow.useWorldSpace = true;
+            shieldGlow.positionCount = 49;
+            shieldGlow.sortingOrder = personalShield.sortingOrder - 1;
+            personalShield.startWidth = personalShield.endWidth = .065f;
+            personalShield.numCapVertices = personalShield.numCornerVertices = 4;
             controls.ActionNotice += ShowNotice;
             controls.ActionTaken += PlayNote;
             controls.ActionUndone+=UndoFeedback;
@@ -58,6 +74,7 @@ namespace FourCore
                 }
             }
             ShowNotice(encounter.Run.StageLabel);
+            ResetProgress();
         }
         private void PlayNote()
         {
@@ -66,6 +83,9 @@ namespace FourCore
         }
         private void UndoFeedback()
         {
+            SpawnPulse.Clear(player);
+            wasShielded = encounter.Run.PersonalShield; shieldAge = 1f;
+            ResetProgress();
             hitRemaining=0f;playerRenderer.SetPropertyBlock(null);noticeRemaining=0f;
             wasFrozen=encounter.Run.FreezeMoves>0;freezeAge=wasFrozen?1f:0f;freezeAlpha=wasFrozen ? .12f : 0f;
             audioSource.Stop();audioSource.pitch=1f;audioSource.PlayOneShot(undoClip);ShowNotice("UNDO");
@@ -75,6 +95,12 @@ namespace FourCore
             noticeText.text = text; noticeRemaining = 1.2f;
         }
         private void Hit() { hitRemaining = 0.2f; ShowNotice("HIT"); }
+        private void PickupFeedback(PickupType type)
+        {
+            if (type != PickupType.PersonalShield) return;
+            shieldAge = 0f; wasShielded = true;
+            SpawnPulse.Play(player, player.position, new Color(.5f, .8f, 1f), 1.1f);
+        }
         private void Update()
         {
             if (encounter == null) return;
@@ -98,13 +124,24 @@ namespace FourCore
             freezeCount.text = encounter.Run.FreezeMoves.ToString();
             freezeCount.transform.position = player.position + new Vector3(0f,0f,-0.3f);
             freezeTint.color = new Color(0.38f,0.1f,0.7f,freezeAlpha);
-            progress.fillAmount = encounter.Run.Phase == EncounterPhase.Boss || encounter.Run.IsInfinite ? 0f : encounter.Run.Resolved/(float)RunState.EnemiesPerChapter;
-            personalShield.enabled = encounter.Run.PersonalShield && controls.GameplayInputEnabled;
+            UpdateProgress();
+            bool shielded = encounter.Run.PersonalShield;
+            if (shielded && !wasShielded) PickupFeedback(PickupType.PersonalShield);
+            wasShielded = shielded;
+            shieldAge += Time.unscaledDeltaTime;
+            personalShield.enabled = shieldGlow.enabled = shielded && controls.GameplayInputEnabled;
+            float shieldAppear = Mathf.SmoothStep(0f, 1f, shieldAge / .3f);
+            float glow = .22f + .06f * Mathf.Sin(Time.unscaledTime * 3f);
+            personalShield.startColor = personalShield.endColor = new Color(.8f, .92f, 1f, .95f * shieldAppear);
+            shieldGlow.startWidth = shieldGlow.endWidth = .2f;
+            shieldGlow.startColor = shieldGlow.endColor = new Color(.4f, .65f, 1f, glow * shieldAppear);
             personalShield.useWorldSpace = true; personalShield.positionCount = 49;
             for (int i = 0; i < 49; i++)
             {
                 float angle = i/48f*Mathf.PI*2f;
-                personalShield.SetPosition(i,player.position + new Vector3(Mathf.Cos(angle)*0.49f,Mathf.Sin(angle)*0.49f,-0.15f));
+                Vector3 point = player.position + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * Mathf.Lerp(.2f, .52f, shieldAppear) + Vector3.back * .15f;
+                personalShield.SetPosition(i, point);
+                shieldGlow.SetPosition(i, point + Vector3.forward * .01f);
             }
             if (hitRemaining > 0f)
             {
@@ -113,9 +150,39 @@ namespace FourCore
                 playerRenderer.SetPropertyBlock(hitRemaining > 0f ? properties : null);
             }
         }
+        private float TargetProgress => encounter.Run.IsInfinite ? 0f : Mathf.Clamp01(encounter.Run.Resolved / (float)RunState.EnemiesPerChapter);
+
+        private void ResetProgress()
+        {
+            progressChapter = encounter.Run.Chapter;
+            progressMode = encounter.Run.Mode;
+            progress.fillAmount = progressFrom = progressTarget = TargetProgress;
+            progressAge = ProgressDuration;
+        }
+
+        private void UpdateProgress()
+        {
+            float target = TargetProgress;
+            if (progressChapter != encounter.Run.Chapter || progressMode != encounter.Run.Mode || target < progressTarget)
+            {
+                ResetProgress();
+                return;
+            }
+            if (target != progressTarget)
+            {
+                progressFrom = progress.fillAmount;
+                progressTarget = target;
+                progressAge = 0f;
+            }
+            progressAge += Time.unscaledDeltaTime;
+            progress.fillAmount = Mathf.Lerp(progressFrom, progressTarget, Mathf.SmoothStep(0f, 1f, progressAge / ProgressDuration));
+        }
+
         private void OnDestroy()
         {
             if (encounter != null) { encounter.Run.Notice -= ShowNotice; encounter.PlayerDamaged -= Hit; }
+            if (encounter != null) encounter.PickupCollected -= PickupFeedback;
+            if (shieldGlow != null) Destroy(shieldGlow.gameObject);
             if (controls != null) { controls.ActionNotice -= ShowNotice; controls.ActionTaken -= PlayNote;controls.ActionUndone-=UndoFeedback; }
             if (notes != null) foreach (AudioClip note in notes) if (note != null) Destroy(note);
             if(undoClip!=null)Destroy(undoClip);

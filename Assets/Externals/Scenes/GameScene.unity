@@ -787,7 +787,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\uC99D\uAC15 \uD558\uB098\uB97C \uC120\uD0DD\uD558\uC138\uC694 \xB7 \uC774\uBC88 \uD50C\uB808\uC774 \uB3D9\uC548 \uD6A8\uACFC\uAC00 \uB204\uC801\uB429\uB2C8\uB2E4"
+  m_text: "\uC99D\uAC15 \uD558\uB098\uB97C \uC120\uD0DD\uD558\uC138\uC694"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 1d5615f11ba263043bbaa67faafe624f, type: 2}
   m_sharedMaterial: {fileID: 1079077047828218870, guid: 1d5615f11ba263043bbaa67faafe624f, type: 2}
@@ -1985,7 +1985,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &678636545
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2564,7 +2564,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &826804928
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2768,7 +2768,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &890933895
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3694,7 +3694,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1131076713
 MonoBehaviour:
   m_ObjectHideFlags: 0

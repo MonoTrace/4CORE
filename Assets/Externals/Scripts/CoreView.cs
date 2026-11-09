@@ -11,6 +11,7 @@ namespace FourCore
         [SerializeField] private TMPro.TMP_Text[] recoveryLabels;
         [SerializeField] private Color brokenColor = new(0.22f, 0.035f, 0.045f, 1f);
         private MaterialPropertyBlock properties;
+        private bool[] previousAlive;
         public event Action<CoreState, bool> Applied;
 
         public Transform GetCellTransform(int index) => cells[index].transform;
@@ -25,10 +26,16 @@ namespace FourCore
 
         public void Apply(CoreState state, bool animate = true)
         {
+            if (!animate) SpawnPulse.Clear(transform);
+            bool hasPrevious = previousAlive != null;
+            previousAlive ??= new bool[state.CellCount];
             properties ??= new MaterialPropertyBlock();
             for (int index = 0; index < state.CellCount; index++)
             {
                 bool alive = state.IsAlive(index);
+                if (animate && hasPrevious && alive && !previousAlive[index])
+                    SpawnPulse.Play(transform, cells[index].transform.position, new Color(.15f, .55f, 1f), 1.15f);
+                previousAlive[index] = alive;
                 cells[index].SetActive(true);
                 if (cellRenderers != null && index < cellRenderers.Length && cellRenderers[index] != null)
                 {

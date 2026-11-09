@@ -55,7 +55,7 @@ namespace FourCore
                 Vector2Int direction = state.Side switch { 0 => Vector2Int.down, 1 => Vector2Int.left, 2 => Vector2Int.up, _ => Vector2Int.right };
                 // Show the forthcoming volley even during the resting/aiming turn.
                 BossState preview = state.Copy();
-                if (!state.HasMissiles && !state.UsesResonance && !state.UsesStraightCharge) preview.Fire(core);
+                if (!state.HasMissiles && !state.UsesResonance && !state.UsesCharge) preview.Fire(core);
                 BossProjectile pathMissile = state.HasMissiles ? m : preview.Missiles[i];
                 GridPosition point = pathMissile.Position;
                 direction = pathMissile.Direction;

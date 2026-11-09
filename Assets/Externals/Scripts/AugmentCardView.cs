@@ -14,20 +14,31 @@ namespace FourCore
         private Vector2 restingPosition;
         private bool pointerOver, focused, pressed;
         private float emphasis;
+        private CanvasGroup presentationGroup;
+        private bool presenting;
 
         public void Configure(AugmentCardArtwork graphic, TMPro.TMP_Text footer) { artwork = graphic; hint = footer; }
-        private void Awake() { rect = (RectTransform)transform; button = GetComponent<UnityEngine.UI.Button>(); restingPosition = rect.anchoredPosition; }
+        private void Awake()
+        {
+            rect = (RectTransform)transform; button = GetComponent<UnityEngine.UI.Button>(); restingPosition = rect.anchoredPosition;
+            presentationGroup = GetComponent<CanvasGroup>();
+            if (presentationGroup == null) presentationGroup = gameObject.AddComponent<CanvasGroup>();
+            if (hint != null) hint.gameObject.SetActive(false);
+        }
         private void OnEnable() { if (rect != null) ResetVisual(); }
         private void OnDisable() { if (rect != null) ResetVisual(); }
         private void ResetVisual()
         {
             pointerOver = focused = pressed = false; emphasis = 0;
+            presenting = false;
+            if (presentationGroup != null) presentationGroup.alpha = 1f;
             rect.anchoredPosition = restingPosition; rect.localScale = Vector3.one;
             artwork?.SetEmphasis(0);
             if (hint != null) hint.alpha = .38f;
         }
         private void Update()
         {
+            if (presenting) return;
             bool active = button.IsInteractable() && (pointerOver || focused);
             emphasis = Mathf.Lerp(emphasis, active ? 1f : 0f, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 13f));
             rect.anchoredPosition = restingPosition + Vector2.up * (18f * emphasis);
@@ -36,6 +47,20 @@ namespace FourCore
             artwork?.SetEmphasis(emphasis);
             if (hint != null) hint.alpha = Mathf.Lerp(.38f, 1f, emphasis);
         }
+        public void Present(float opacity, float scale, float lift, float highlight)
+        {
+            PresentAt(opacity, scale, restingPosition + Vector2.up * lift, highlight);
+        }
+        public Vector2 RestingPosition => restingPosition;
+        public void PresentAt(float opacity, float scale, Vector2 position, float highlight)
+        {
+            presenting = true;
+            presentationGroup.alpha = opacity;
+            rect.localScale = Vector3.one * scale;
+            rect.anchoredPosition = position;
+            artwork?.SetEmphasis(highlight);
+        }
+        public void EndPresentation() => ResetVisual();
         public void OnPointerEnter(PointerEventData e)
         {
             pointerOver = true;

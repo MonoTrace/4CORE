@@ -26,9 +26,20 @@ namespace FourCore.EditorTools
             if (flow.State == GameFlowState.Reward)
             {
                 typeof(GameFlowController).GetMethod("ConfigureAugmentChoices", Fields).Invoke(flow,null);
+                // Synchronous combat fixtures skip real-time waits; PresentationGameplayChecks
+                // separately verifies reveal, selection lock and resume on actual rendered frames.
+                CompleteRewardSequence(flow, "RevealRewards", null);
                 Read<UnityEngine.UI.Button>(flow,"freezeReward").onClick.Invoke();
+                CompleteRewardSequence(flow, "AcceptReward", new object[] { 0, type });
             }
             else Need(manager.ChooseReward(type), "augment accepted");
+        }
+        private static void CompleteRewardSequence(GameFlowController flow, string method, object[] args)
+        {
+            flow.StopAllCoroutines();
+            var sequence = (System.Collections.IEnumerator)typeof(GameFlowController).GetMethod(method, Fields).Invoke(flow,args);
+            int remaining = 10000;
+            while (sequence.MoveNext()) if (--remaining == 0) throw new Exception("Reward fixture did not complete: " + method);
         }
         public static string Augments()
         {
@@ -129,6 +140,7 @@ namespace FourCore.EditorTools
                     GridPosition next=boss.NextCharge();
                     Need(next.X==boss.Origin.X&&next.Y==boss.Origin.Y-1,"cardinal core-directed step");
                 }
+                else if (stage == 2) Need(boss.UsesDiagonalCharge && !boss.HasMissiles, "diagonal boss never fires");
                 else Need(boss.HasMissiles,"projectile boss attacks");
                 run.BeginBoss();run.CompleteBoss();SkipBossReward(run);
             }
@@ -137,12 +149,26 @@ namespace FourCore.EditorTools
             Need(!artillery.UsesResonance,"first volley normal missile");
             artillery.EndVolley();Need(artillery.UsesResonance,"second volley resonance");
             artillery.EndVolley();Need(!artillery.UsesResonance,"alternating volley");
-            BossState phase=new();phase.Begin(0,2);phase.MoveCharge(phase.NextCharge());phase.MoveCharge(phase.NextCharge());
-            Need(!phase.BodyVisible&&!phase.Copy().BodyVisible,"phase and snapshot");
+            for (int side = 0; side < 4; side++)
+            {
+                BossState diagonal = new(); diagonal.Begin(side, 2);
+                bool reached = false;
+                for (int step = 0; step < 7 && !reached; step++)
+                {
+                    GridPosition next = diagonal.NextCharge();
+                    Need(Mathf.Abs(next.X-diagonal.Origin.X)==1 && Mathf.Abs(next.Y-diagonal.Origin.Y)==1, "always diagonal");
+                    for (int cell = 0; cell < diagonal.CellCount; cell++) reached |= core.Occupies(diagonal.CellAt(next,cell));
+                    diagonal.MoveCharge(next); diagonal.Fire(core);
+                    Need(diagonal.BodyVisible && !diagonal.HasMissiles, "no phase hiding or projectiles");
+                }
+                Need(reached, "all four diagonals reach the core");
+                BossState copy = diagonal.Copy(); diagonal.Teleport((side+1)%4); diagonal.Restore(copy);
+                Need(diagonal.Origin.Equals(copy.Origin) && diagonal.NextCharge().Equals(copy.NextCharge()), "diagonal snapshot");
+            }
             run.ConfigureMode(GameMode.Infinite);
             for(int i=0;i<100;i++){run.SpawnedEnemy();run.ResolvedEnemy();}
             Need(run.CanSpawn&&!run.BossReady,"separate infinite mode unchanged");
-            return "PASS: exact three-stage rosters, 30 spawns, cardinal charge, alternating missile/resonance boss, phase snapshot, final completion, infinite";
+            return "PASS: stage rosters, cardinal charge, four diagonal charges/core targeting/snapshots, artillery volleys, stage ending, infinite";
         }
 
         public static void ShowBoss(int stage)
@@ -203,9 +229,9 @@ namespace FourCore.EditorTools
             ShowBoss(2);manager.Boss.MoveCharge(manager.Boss.NextCharge());manager.Boss.MoveCharge(manager.Boss.NextCharge());
             Read<BossView>(manager,"bossView").Apply(false);
             var renderers=Read<MeshRenderer[]>(Read<BossView>(manager,"bossView"),"cellRenderers");
-            Need(renderers.All(v=>!v.gameObject.activeSelf),"phase boss hidden on even movement");
+            Need(renderers.Count(v=>v.gameObject.activeSelf)==5,"diagonal boss stays visible");
             ShowBoss(1);
-            return "PASS: actual 90-enemy rosters, straight charge/rest/core damage/shield block/undo, missile and resonance attacks, phase view";
+            return "PASS: actual 90-enemy rosters, straight charge/rest/core damage/shield block/undo, missile and resonance attacks, diagonal view";
         }
         public static string CounterCombat()
         {

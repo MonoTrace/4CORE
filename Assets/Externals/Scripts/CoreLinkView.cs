@@ -18,6 +18,14 @@ namespace FourCore
         [SerializeField, Min(0.01f)] private float breakFadeDuration = 0.04f;
         [SerializeField, Min(0.01f)] private float zoomOutDuration = 0.08f;
         [SerializeField, Min(0.01f)] private float reconnectDuration = 0.5f;
+        [Header("PIXELFX beam")]
+        [SerializeField] private string beamClip = PixelFx.Keys.CoreLink;
+        [SerializeField, Min(0.01f)] private float beamWidth = 0.34f;
+        [SerializeField, Range(0f, 1f)] private float beamAlpha = 1f;
+        private PixelFxClip beam;
+        private MaterialPropertyBlock beamProperties;
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private CoreView coreView;
         private Transform player;
         private PlayerController controls;
@@ -45,6 +53,8 @@ namespace FourCore
             coreView = view; this.player = player; this.controls = controls;
             this.gameFlow = gameFlow;
             alive = new bool[state.CellCount]; phases = new LinkPhase[state.CellCount]; ages = new float[state.CellCount];
+            beam = PixelFxClip.Load(beamClip);
+            beamProperties = new MaterialPropertyBlock();
             foreach (LineRenderer line in lines)
             {
                 if (line == null)
@@ -58,7 +68,7 @@ namespace FourCore
                 line.sortingOrder = 2;
                 line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 line.receiveShadows = false;
-                line.widthMultiplier = 0.12f;
+                line.widthMultiplier = beam != null ? beamWidth : 0.12f;
                 line.widthCurve = new AnimationCurve(
                     new Keyframe(0f, 0.72f),
                     new Keyframe(0.18f, 0.92f),
@@ -147,6 +157,7 @@ namespace FourCore
         private void RenderLines()
         {
             int availableIndex=0;
+            int beamFrame = beam != null ? beam.FrameAt(Time.unscaledTime) : 0;
             for (int i = 0; i < lines.Length; i++)
             {
                 bool visible = phases[i] != LinkPhase.Disconnected && visibility > 0f;
@@ -189,6 +200,15 @@ namespace FourCore
                     line.SetPosition(pointIndex, point);
                 }
                 Color start = coreColor, end = playerColor;
+                if (beam != null)
+                {
+                    // The PIXELFX beam carries its own glow and falloff, so it runs at full strength.
+                    start.a = end.a = beamAlpha;
+                    beamProperties.SetTexture(MainTexId, beam.Texture);
+                    beamProperties.SetVector(MainTexStId, beam.UvRect(beamFrame));
+                    line.SetPropertyBlock(beamProperties);
+                }
+                // Dim links beyond the player's current energy (after the beam alpha so it still shows).
                 if(alive[i])
                 {
                     if(energy!=null&&availableIndex>=energy.Current){end.r*=.3f;end.g*=.3f;end.b*=.3f;end.a*=.45f;}

@@ -106,6 +106,7 @@ namespace FourCore
                 popup.gameObject.SetActive(false);
                 Destroy(popup.gameObject);
             }
+            PixelFx.ClearChildren(transform);
             spawnIndex = snapshot.SpawnIndex;
             turnsUntilSpawn = snapshot.TurnsUntilSpawn;
             if (snapshot.Run != null) Run.Restore(snapshot.Run);
@@ -312,6 +313,7 @@ namespace FourCore
                 }
                 if (HasShield(destination))
                 {
+                    PlayEffect(PixelFx.Keys.ShieldBreak, destination);
                     ResolveBodyShield(enemy, destination);
                     continue;
                 }
@@ -371,12 +373,14 @@ namespace FourCore
         {
             DamagePlayer();
             removedEnemies.Add(enemy);
+            PlayEffect(PixelFx.Keys.EnemyDefeat(enemy.State.Type), enemy.State.Position, scale: 0.8f);
             if((enemy.State.Traits&EnemyTraits.Split)!=0)
             {pendingFragments.Add(enemy.State.Position);pendingFragments.Add(enemy.State.Position);}
         }
 
         private void DamagePlayer()
         {
+            PlayEffect(PixelFx.Keys.PlayerHit, playerState.Position);
             if(Run.AbsorbHit())return;
             // Destroy one live core, rather than only spending deployable energy.
             // Prefer the closest connected core; cell order breaks distance ties.
@@ -402,6 +406,11 @@ namespace FourCore
             shieldView.Apply(shieldState);
         }
 
+        private void PlayEffect(string key, GridPosition position, float angle = 0f, float scale = 1f)
+        {
+            PixelFx.Play(key, transform, GameConfig.LogicalToWorld(position, -0.35f), angle, scale);
+        }
+
         private void DamageEnemy(EnemyRuntime enemy, GridPosition position)
         {
             if (removedEnemies.Contains(enemy) || !enemy.State.TakeDamage()) return;
@@ -409,6 +418,7 @@ namespace FourCore
             removedEnemies.Add(enemy);
             if((enemy.State.Traits&EnemyTraits.Split)!=0)
             {pendingFragments.Add(position);pendingFragments.Add(position);}
+            PlayEffect(PixelFx.Keys.EnemyDefeat(enemy.State.Type), position);
             int coreCount = coreState.AliveCount;
             long awarded = scoreState.AddEnemyDefeat(enemy.State.BaseScore, coreCount);
             if (Random.Range(0,100) < 33 && !coreState.Occupies(position) && !Portals.IsEndpoint(position))
@@ -450,6 +460,8 @@ namespace FourCore
             if (!GameConfig.IsInsideLogical(next)) { state.StopMissile(); return; }
             if (ConsumeShield(next))
             {
+                // The energy dome faces back along the incoming missile.
+                PlayEffect(PixelFx.Keys.MissileReflect, next, PixelFx.Angle(-state.MissileDirection));
                 state.ReflectMissile(next);
                 return;
             }

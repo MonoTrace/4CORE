@@ -8,11 +8,13 @@ namespace FourCore
         [SerializeField] private EnemyPathView pathView;
         [SerializeField] private EnemyPathView missilePathView;
         [SerializeField] private SpriteRenderer missilePrefab;
+        [SerializeField, Min(0.01f)] private float missileEffectScale = 0.7f;
         private SpriteRenderer missile;
         private MaterialPropertyBlock themeBlock;
         private Transform body;
         private Vector3 originalBodyScale;
         [SerializeField] private LineRenderer armorOutline;
+        private PixelFxPlayer missileFx;
         public EnemyType Type => enemyType;
 
         public void Initialize(EnemyState state)
@@ -25,7 +27,12 @@ namespace FourCore
                 missile = Instantiate(missilePrefab, transform, false);
                 missile.name = "Missile";
                 missile.sortingOrder = 9;
-                missile.transform.localScale = new Vector3(0.18f, 0.42f, 1f);
+                missileFx = PixelFxPlayer.Attach(missile, PixelFx.Keys.Missile, destroyWhenDone: false);
+                missile.color = Color.white;
+                // The PIXELFX plasma shot is drawn pointing right, centred on its glowing head.
+                missile.transform.localScale = missileFx.ClipKey != null
+                    ? Vector3.one * missileEffectScale
+                    : new Vector3(0.18f, 0.42f, 1f);
             }
             Apply(state);
         }
@@ -62,8 +69,14 @@ namespace FourCore
             missile.gameObject.SetActive(state.MissileActive);
             if (!state.MissileActive) return;
             missile.transform.localPosition = GameConfig.LogicalToWorld(state.MissilePosition, -0.18f) - transform.localPosition;
-            missile.transform.localRotation = Quaternion.Euler(0f, 0f,
-                Mathf.Atan2(state.MissileDirection.y, state.MissileDirection.x) * Mathf.Rad2Deg - 90f);
+            float angle = Mathf.Atan2(state.MissileDirection.y, state.MissileDirection.x) * Mathf.Rad2Deg;
+            if (missileFx != null && missileFx.ClipKey != null)
+            {
+                missile.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+                missileFx.Play(state.MissileReflected ? PixelFx.Keys.MissileReflected : PixelFx.Keys.Missile, restart: false);
+                return;
+            }
+            missile.transform.localRotation = Quaternion.Euler(0f, 0f, angle - 90f);
             missile.color = state.MissileReflected ? new Color(0.05f, 0.65f, 1f) : new Color(1f, 0.15f, 0.85f);
         }
     }
